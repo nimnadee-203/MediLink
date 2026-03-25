@@ -1,0 +1,9 @@
+{
+  "name": "telemedicine-service",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "dependencies": {
+    "express": "^4.18.0",
+    "socket.io": "^4.5.0"
+  }
+}
