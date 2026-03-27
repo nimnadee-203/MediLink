@@ -1,8 +1,8 @@
-import mockUsers from "../../mocks/users.mock"
-
+import mockUsers from "../../mocks/users.mock.js";
+import mockAppointments from "../../mocks/appoiments.mock.js";
 
 //API to get dashboard data for admin panel
-const adminDashboard = async (req,res)=>{
+export const adminDashboard = async (req,res)=>{
     try{
         const doctors = await mockUsers.find({})
         const users = await mockUsers.find({})
