@@ -1,7 +1,10 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import { Dashboard, Appointments, AddDoctor, DoctorList } from './pages/AdminPages';
+import Dashboard from './pages/Admin/Dashboard';
+import Appointments from './pages/Admin/Appointments';
+import AddDoctor from './pages/Admin/AddDoctor';
+import DoctorList from './pages/Admin/DoctorList';
 
 function App() {
   return (
