@@ -1,9 +1,13 @@
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const multer = require('multer');
-const Patient = require('../models/Patient');
-const { authMiddleware, verifyFirebaseToken } = require('../middleware/auth');
+import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import Patient from '../models/Patient.js';
+import { authMiddleware } from '../middleware/auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -33,55 +37,54 @@ const sanitizePatient = (patient) => ({
   age: patient.age,
   gender: patient.gender,
   address: patient.address,
-  firebaseUid: patient.firebaseUid,
+  clerkUserId: patient.clerkUserId,
   createdAt: patient.createdAt,
   updatedAt: patient.updatedAt
 });
 
 const resolveCurrentPatient = async (user) => {
   const patient = await Patient.findOne({
-    $or: [{ firebaseUid: user.id }, { email: user.email }]
+    $or: [{ clerkUserId: user.id }, { email: user.email }]
   });
 
   if (patient) {
-    if (!patient.firebaseUid) {
-      patient.firebaseUid = user.id;
+    let shouldSave = false;
+
+    if (!patient.clerkUserId) {
+      patient.clerkUserId = user.id;
+      shouldSave = true;
+    }
+
+    const hasRealUserEmail = Boolean(user.email && !user.email.endsWith('@clerk.local'));
+    const hasPlaceholderPatientEmail = Boolean(patient.email && patient.email.endsWith('@clerk.local'));
+
+    if (hasRealUserEmail && hasPlaceholderPatientEmail) {
+      patient.email = user.email;
+      shouldSave = true;
+    }
+
+    if (shouldSave) {
       await patient.save();
     }
+
     return patient;
   }
 
   const created = await Patient.create({
-    name: user.name || user.email || user.phone || 'Firebase User',
-    email: user.email || `${user.id}@firebase.local`,
-    firebaseUid: user.id,
+    name: user.name || user.email || user.phone || 'Clerk User',
+    email: user.email || `${user.id}@clerk.local`,
+    clerkUserId: user.id,
     phone: user.phone || undefined
   });
   return created;
 };
 
 router.post('/register', async (req, res) => {
-  return res.status(410).json({ message: 'Email/password registration is disabled. Use Firebase OTP authentication.' });
+  return res.status(410).json({ message: 'This service uses Clerk authentication. Sign up from the client app.' });
 });
 
 router.post('/login', async (req, res) => {
-  return res.status(410).json({ message: 'Email/password login is disabled. Use Firebase OTP authentication.' });
-});
-
-router.post('/firebase/login', async (req, res) => {
-  try {
-    const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ message: 'idToken is required' });
-    }
-
-    const user = await verifyFirebaseToken(idToken);
-    const patient = await resolveCurrentPatient(user);
-
-    return res.json({ message: 'Firebase login successful', token: idToken, patient: sanitizePatient(patient) });
-  } catch (error) {
-    return res.status(401).json({ message: 'Firebase login failed', error: error.message });
-  }
+  return res.status(410).json({ message: 'This service uses Clerk authentication. Sign in from the client app.' });
 });
 
 router.get('/profile', authMiddleware, async (req, res) => {
@@ -162,4 +165,4 @@ router.get('/reports', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

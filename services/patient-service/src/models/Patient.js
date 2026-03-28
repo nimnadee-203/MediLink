@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const reportSchema = new mongoose.Schema(
   {
@@ -18,7 +18,7 @@ const patientSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, minlength: 6 },
-    firebaseUid: { type: String, unique: true, sparse: true },
+    clerkUserId: { type: String, unique: true, sparse: true },
     phone: { type: String, trim: true },
     age: { type: Number },
     gender: { type: String, enum: ['male', 'female', 'other'] },
@@ -28,4 +28,6 @@ const patientSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Patient', patientSchema);
+const Patient = mongoose.model('Patient', patientSchema);
+
+export default Patient;

@@ -1,43 +1,60 @@
-const admin = require('firebase-admin');
+import { verifyToken } from '@clerk/backend';
 
-let firebaseInitialized = false;
+const getClerkSecretKey = () => {
+  const secretKey = process.env.CLERK_SECRET_KEY;
 
-const initFirebase = () => {
-  if (firebaseInitialized) {
-    return;
+  if (!secretKey || /replace_with/i.test(secretKey)) {
+    return null;
   }
 
-  const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY } = process.env;
-
-  if (!FIREBASE_PROJECT_ID) {
-    return;
-  }
-
-  if (FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: FIREBASE_PROJECT_ID,
-        clientEmail: FIREBASE_CLIENT_EMAIL,
-        privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      })
-    });
-  } else {
-    admin.initializeApp({
-      projectId: FIREBASE_PROJECT_ID
-    });
-  }
-
-  firebaseInitialized = true;
+  return secretKey;
 };
 
-const verifyFirebaseToken = async (token) => {
-  initFirebase();
-  if (!firebaseInitialized) {
-    throw new Error('Firebase Admin is not configured. Set FIREBASE_PROJECT_ID (and optionally FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY).');
+const decodeJwtPayloadUnsafe = (token) => {
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Invalid JWT form. A JWT consists of three parts separated by dots.');
   }
 
-  const decoded = await admin.auth().verifyIdToken(token);
-  return { id: decoded.uid, email: decoded.email, name: decoded.name, authType: 'firebase' };
+  const base64Url = parts[1];
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4 || 4)) % 4);
+  const payloadJson = Buffer.from(padded, 'base64').toString('utf8');
+  const payload = JSON.parse(payloadJson);
+
+  if (!payload?.sub) {
+    throw new Error('Token payload missing required subject (sub).');
+  }
+
+  if (payload?.exp && Date.now() >= payload.exp * 1000) {
+    throw new Error('Token is expired. Please sign in again.');
+  }
+
+  return payload;
+};
+
+const verifyClerkToken = async (token) => {
+  const secretKey = getClerkSecretKey();
+
+  let payload;
+
+  if (secretKey) {
+    payload = await verifyToken(token, { secretKey });
+  } else if (process.env.NODE_ENV !== 'production') {
+    payload = decodeJwtPayloadUnsafe(token);
+  } else {
+    throw new Error('Clerk backend secret key is not configured. Set a real CLERK_SECRET_KEY in services/patient-service/.env');
+  }
+
+  const fullName = payload.name || [payload.first_name, payload.last_name].filter(Boolean).join(' ').trim();
+
+  return {
+    id: payload.sub,
+    email: payload.email || payload.email_address || '',
+    name: fullName,
+    phone: payload.phone_number || '',
+    authType: 'clerk'
+  };
 };
 
 const authMiddleware = async (req, res, next) => {
@@ -48,15 +65,19 @@ const authMiddleware = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    req.user = await verifyFirebaseToken(token);
+    req.user = await verifyClerkToken(token);
 
     return next();
   } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token', error: error.message });
+    if (/secret key is not configured/i.test(error.message)) {
+      return res.status(500).json({ message: error.message });
+    }
+
+    return res.status(401).json({ message: 'Invalid or expired Clerk token', error: error.message });
   }
 };
 
-module.exports = {
+export {
   authMiddleware,
-  verifyFirebaseToken
+  verifyClerkToken
 };

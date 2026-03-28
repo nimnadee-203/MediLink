@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { authenticateJwt, verifyFirebaseToken, getJwtSecret } = require('../middleware/authMiddleware');
+const { authenticateJwt, getJwtSecret } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -10,7 +10,6 @@ const toPublicUser = (user) => ({
   name: user.name,
   email: user.email,
   role: user.role,
-  firebaseUid: user.firebaseUid,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt
 });
@@ -87,45 +86,6 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to login', error: error.message });
-  }
-});
-
-router.post('/firebase/login', async (req, res) => {
-  try {
-    const { idToken, role } = req.body;
-
-    if (!idToken) {
-      return res.status(400).json({ message: 'idToken is required' });
-    }
-
-    const decoded = await verifyFirebaseToken(idToken);
-    const email = decoded.email || `${decoded.uid}@firebase.local`;
-
-    let user = await User.findOne({
-      $or: [{ firebaseUid: decoded.uid }, { email: email.toLowerCase() }]
-    });
-
-    if (!user) {
-      user = await User.create({
-        name: decoded.name || email,
-        email: email.toLowerCase(),
-        firebaseUid: decoded.uid,
-        role: role || 'patient'
-      });
-    } else if (!user.firebaseUid) {
-      user.firebaseUid = decoded.uid;
-      await user.save();
-    }
-
-    const token = generateJwt(user);
-
-    return res.json({
-      message: 'Firebase login successful',
-      token,
-      user: toPublicUser(user)
-    });
-  } catch (error) {
-    return res.status(401).json({ message: 'Firebase login failed', error: error.message });
   }
 });
 

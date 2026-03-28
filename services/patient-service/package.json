@@ -2,10 +2,16 @@
   "name": "patient-service",
   "version": "1.0.0",
   "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
   "dependencies": {
+    "@clerk/backend": "^1.22.0",
     "dotenv": "^17.3.1",
     "express": "^4.22.1",
-    "mongoose": "^6.13.9"
+    "mongoose": "^6.13.9",
+    "multer": "^2.1.1"
   },
   "type": "module"
 }

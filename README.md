@@ -15,13 +15,12 @@ Microservices-based healthcare management system with AI integration.
 Implemented in `services/patient-service` with MongoDB.
 
 ### Features
-- Firebase OTP login/signup (phone-based)
+- Clerk-based sign in/sign up
 - Profile management
 - Report upload and listing
-- Authentication with Firebase token verification only
+- Authentication with Clerk session token verification
 
 ### Main Endpoints
-- `POST /api/patients/firebase/login`
 - `GET /api/patients/profile`
 - `PUT /api/patients/profile`
 - `POST /api/patients/reports` (multipart form-data, file field: `report`)
@@ -34,30 +33,21 @@ Gateway proxy (from `api-gateway`):
 ### Environment Variables (Patient Service)
 - `PORT` (default: `8002`)
 - `MONGO_URI` (default: `mongodb://localhost:27017/medisync`)
-- `FIREBASE_PROJECT_ID` (required)
-
-Optional service-account variables (recommended in production):
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY` (with `\n` escaped in `.env`)
+- `CLERK_SECRET_KEY` (required)
 
 ## Patient + Auth Frontend (React)
 
 Implemented in `client` with React + Vite.
 
 ### Pages
-- Sign In page (Firebase phone OTP)
-- Sign Up page (Firebase phone OTP)
+- Sign In page (Clerk)
+- Sign Up page (Clerk)
 - Patient Dashboard (report upload + reports list)
 - Profile page (view/update profile)
 
 ### Frontend Environment
 - `VITE_API_BASE_URL` (default: `http://localhost:8000/api/patients`)
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_APP_ID`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_CLERK_PUBLISHABLE_KEY`
 
 ### Run Frontend
 ```bash
@@ -73,7 +63,6 @@ Implemented in `services/auth-service` with MongoDB.
 ### Endpoints
 - `POST /api/auth/register`
 - `POST /api/auth/login`
-- `POST /api/auth/firebase/login`
 - `GET /api/auth/me` (JWT required)
 - `GET /api/auth/verify` (JWT required)
 
@@ -81,8 +70,3 @@ Implemented in `services/auth-service` with MongoDB.
 - `PORT` (default: `8001`)
 - `MONGO_URI`
 - `JWT_SECRET`
-
-Firebase mode additionally requires:
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY`
