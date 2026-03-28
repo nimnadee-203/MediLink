@@ -25,6 +25,7 @@ app.get('/', (req, res) => {
 
 const startServer = async () => {
     await connectDB();
+    await connectCloudinary();
     app.listen(port, () => {
         console.log(`Doctor Service listening at http://localhost:${port}`);
     });

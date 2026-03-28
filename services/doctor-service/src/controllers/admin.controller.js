@@ -6,6 +6,7 @@ import appoimentModel from "../models/Appoiment_test.js"
 import validator from "validator"
 import bcrypt, { hash } from 'bcrypt'
 import {v2 as cloudinary} from 'cloudinary'
+import jwt from 'jsonwebtoken'
 
 //API for adding doctor
 export const addDoctor = async (req, res)=>{
@@ -40,6 +41,8 @@ export const addDoctor = async (req, res)=>{
         const imageUpload = await cloudinary.uploader.upload(imageFile.path,{resource_type:"image"})
         const imageUrl = imageUpload.secure_url
 
+       
+
         const doctorData = {
             name,
             email,
@@ -50,7 +53,7 @@ export const addDoctor = async (req, res)=>{
             experience,
             about,
             fees,
-            address:JSON.parse(address),
+            address:address,
             date:Date.now()
         }
 
@@ -63,6 +66,27 @@ export const addDoctor = async (req, res)=>{
     }catch(error){
         console.log(error)
         res.json({success:false,message:error.message})
+    }
+}
+
+//API for admin logn
+export const loginAdmin = async (req,res)=>{
+    try{
+        const {email,password} = req.body;
+
+        if(email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD){
+
+            const token = jwt.sign(email+password,process.env.JWT_SECRET)
+            res.json({success:true,token})
+
+        }else{
+            res.json({success:false,message:"Invalid credentials"})
+        }
+
+    }catch(error){
+        console.log(error)
+        res.json({success:false,message:error.message})
+
     }
 }
 

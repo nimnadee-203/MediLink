@@ -5,9 +5,13 @@ const doctorSchema = new mongoose.Schema(
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true
+    required: false
   },
 
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  image: { type: String, required: true },
   speciality: { type: String, required: true },
   degree: { type: String, required: true },
   experience: { type: String, required: true },
@@ -24,8 +28,7 @@ const doctorSchema = new mongoose.Schema(
   },
 
   address: {
-    line1: String,
-    line2: String
+    type: String
   },
 
   slots_booked: {
