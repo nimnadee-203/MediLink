@@ -1,0 +1,24 @@
+{
+  "name": "services-runner",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "install:all": "npm --prefix auth-service install; npm --prefix patient-service install; npm --prefix appointment-service install; npm --prefix doctor-service install; npm --prefix notification-service install; npm --prefix payment-service install; npm --prefix telemedicine-service install",
+    "dev": "npm --prefix auth-service run dev",
+    "dev:auth": "npm --prefix auth-service run dev",
+    "dev:patient": "npm --prefix patient-service run dev",
+    "dev:appointment": "npm --prefix appointment-service run dev",
+    "dev:doctor": "npm --prefix doctor-service run dev",
+    "dev:notification": "npm --prefix notification-service run dev",
+    "dev:payment": "npm --prefix payment-service run dev",
+    "dev:telemedicine": "npm --prefix telemedicine-service run dev"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.2"
+  },
+  "dependencies": {
+    "lucide-react": "^1.7.0"
+  }
+}
