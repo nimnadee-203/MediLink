@@ -4,6 +4,7 @@ const app = express();
 const port = 8000;
 
 const patientServiceTarget = process.env.PATIENT_SERVICE_URL || 'http://localhost:8002';
+const appointmentServiceTarget = process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:8004';
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -19,6 +20,14 @@ app.use(
   '/api/patients',
   createProxyMiddleware({
     target: patientServiceTarget,
+    changeOrigin: true
+  })
+);
+
+app.use(
+  '/api/appointments',
+  createProxyMiddleware({
+    target: appointmentServiceTarget,
     changeOrigin: true
   })
 );

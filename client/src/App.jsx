@@ -1,17 +1,9 @@
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
-import Layout from './components/Layout';
-import Dashboard from './pages/Admin/Dashboard';
-import Appointments from './pages/Admin/Appointments';
-import AddDoctor from './pages/Admin/AddDoctor';
-import DoctorList from './pages/Admin/DoctorList';
 import React, { useEffect, useState } from 'react';
 import {
-  BrowserRouter,
+  Routes,
+  Route,
   Link,
   Navigate,
-  Route,
-  Routes,
   useLocation,
   useNavigate
 } from 'react-router-dom';
@@ -28,6 +20,11 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SignIn, SignUp, SignedIn, SignedOut, UserButton, useAuth, useUser } from '@clerk/clerk-react';
+import Layout from './components/Layout';
+import Dashboard from './pages/Admin/Dashboard';
+import Appointments from './pages/Admin/Appointments';
+import AddDoctor from './pages/Admin/AddDoctor';
+import DoctorList from './pages/Admin/DoctorList';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -73,14 +70,6 @@ const Button = ({ children, variant = 'primary', className, ...props }) => {
     secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-800'
   };
   return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="appointments" element={<Appointments />} />
-        <Route path="add-doctor" element={<AddDoctor />} />
-        <Route path="doctors" element={<DoctorList />} />
-      </Route>
-    </Routes>
     <button
       className={cn(
         'flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50',
@@ -479,12 +468,4 @@ function AppContent() {
   );
 }
 
-function App() {
-  return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AppContent />
-    </BrowserRouter>
-  );
-}
-
-export default App;
+export default AppContent;

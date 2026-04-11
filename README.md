@@ -70,3 +70,24 @@ Implemented in `services/auth-service` with MongoDB.
 - `PORT` (default: `8001`)
 - `MONGO_URI`
 - `JWT_SECRET`
+
+## Appointment Service Backend (Node.js + Express)
+
+Implemented in `services/appointment-service` with MongoDB.
+
+### Endpoints
+- `GET /api/appointments`
+- `POST /api/appointments`
+- `GET /api/appointments/:id`
+- `GET /api/appointments/:id/status`
+- `PATCH /api/appointments/:id`
+- `PATCH /api/appointments/:id/cancel`
+
+Gateway proxy (from `api-gateway`):
+- `/api/appointments/*` -> Appointment service
+
+### Environment Variables (Appointment Service)
+- `PORT` (default: `8004`)
+- `MONGO_URI`
+- `JWT_SECRET` (must match auth-service secret for token verification)
+- `APPOINTMENT_DB_NAME` (default: `appointment-db`)
