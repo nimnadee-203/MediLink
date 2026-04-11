@@ -1,3 +1,10 @@
+import React from 'react';
+import { Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import Dashboard from './pages/Admin/Dashboard';
+import Appointments from './pages/Admin/Appointments';
+import AddDoctor from './pages/Admin/AddDoctor';
+import DoctorList from './pages/Admin/DoctorList';
 import React, { useEffect, useState } from 'react';
 import {
   BrowserRouter,
@@ -66,6 +73,14 @@ const Button = ({ children, variant = 'primary', className, ...props }) => {
     secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-800'
   };
   return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="appointments" element={<Appointments />} />
+        <Route path="add-doctor" element={<AddDoctor />} />
+        <Route path="doctors" element={<DoctorList />} />
+      </Route>
+    </Routes>
     <button
       className={cn(
         'flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50',
