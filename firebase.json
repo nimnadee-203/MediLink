@@ -1,0 +1,12 @@
+{
+  "auth": {
+    "providers": {
+      "anonymous": true,
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Medi Link Auth ",
+        "supportEmail": "IT23589254@my.sliit.lk"
+      }
+    }
+  }
+}
