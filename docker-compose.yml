@@ -5,9 +5,12 @@ services:
     build: ./api-gateway
     ports:
       - "8000:8000"
+    environment:
+      - APPOINTMENT_SERVICE_URL=http://appointment-service:8004
     depends_on:
       - auth-service
       - patient-service
+      - appointment-service
 
   auth-service:
     build: ./services/auth-service
@@ -18,5 +21,10 @@ services:
     build: ./services/patient-service
     ports:
       - "8002:8002"
+
+  appointment-service:
+    build: ./services/appointment-service
+    ports:
+      - "8004:8004"
 
   # ... more services will be added
