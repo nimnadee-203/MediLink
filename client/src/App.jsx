@@ -15,20 +15,15 @@ import {
   Smartphone,
   MapPin,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Stethoscope,
+  ClipboardList
 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import { SignIn, SignUp, SignedIn, SignedOut, UserButton, useAuth, useUser } from '@clerk/clerk-react';
-import Layout from './components/Layout';
-import Dashboard from './pages/Admin/Dashboard';
-import Appointments from './pages/Admin/Appointments';
-import AddDoctor from './pages/Admin/AddDoctor';
-import DoctorList from './pages/Admin/DoctorList';
-
-function cn(...inputs) {
-  return twMerge(clsx(inputs));
-}
+import { cn, Card, Input, Button } from './components/ui';
+import DoctorsList from './pages/DoctorsList';
+import BookAppointment from './pages/BookAppointment';
+import MyAppointments from './pages/MyAppointments';
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 const API_BASE_URL_CANDIDATES = Array.from(
@@ -79,47 +74,6 @@ const getReportPreviewUrl = (report) => {
   return null;
 };
 
-const Card = ({ className, children }) => (
-  <div className={cn('bg-white rounded-2xl shadow-xl border border-gray-100 p-8', className)}>
-    {children}
-  </div>
-);
-
-const Input = ({ icon: Icon, ...props }) => (
-  <div className="relative mb-4">
-    {Icon && (
-      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-        <Icon size={20} />
-      </div>
-    )}
-    <input
-      className={cn(
-        'block w-full rounded-lg border-gray-300 bg-gray-50 border py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all duration-200 outline-none',
-        Icon && 'pl-10'
-      )}
-      {...props}
-    />
-  </div>
-);
-
-const Button = ({ children, variant = 'primary', className, ...props }) => {
-  const variants = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg',
-    secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-  };
-  return (
-    <button
-      className={cn(
-        'flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-200 disabled:opacity-50',
-        variants[variant],
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
 
 function AppContent() {
   const { isSignedIn, getToken } = useAuth();
@@ -366,16 +320,26 @@ function AppContent() {
             </span>
           </div>
 
-          <div className="flex gap-4 items-center">
+          <div className="flex gap-2 sm:gap-3 items-center">
             <SignedIn>
               <Link to="/dashboard">
-                <Button variant={location.pathname === '/dashboard' ? 'primary' : 'secondary'} className="px-4 py-2 text-sm rounded-lg">
-                  <Activity size={18} /> Dashboard
+                <Button variant={location.pathname === '/dashboard' ? 'primary' : 'secondary'} className="px-3 py-2 text-sm rounded-lg">
+                  <Activity size={16} /> <span className="hidden sm:inline">Dashboard</span>
+                </Button>
+              </Link>
+              <Link to="/doctors">
+                <Button variant={location.pathname.startsWith('/doctors') || location.pathname.startsWith('/book') ? 'primary' : 'secondary'} className="px-3 py-2 text-sm rounded-lg">
+                  <Stethoscope size={16} /> <span className="hidden sm:inline">Doctors</span>
+                </Button>
+              </Link>
+              <Link to="/appointments">
+                <Button variant={location.pathname === '/appointments' ? 'primary' : 'secondary'} className="px-3 py-2 text-sm rounded-lg">
+                  <ClipboardList size={16} /> <span className="hidden sm:inline">Appointments</span>
                 </Button>
               </Link>
               <Link to="/profile">
-                <Button variant={location.pathname === '/profile' ? 'primary' : 'secondary'} className="px-4 py-2 text-sm rounded-lg">
-                  <User size={18} /> Profile
+                <Button variant={location.pathname === '/profile' ? 'primary' : 'secondary'} className="px-3 py-2 text-sm rounded-lg">
+                  <User size={16} /> <span className="hidden sm:inline">Profile</span>
                 </Button>
               </Link>
               <UserButton afterSignOutUrl="/signin" />
@@ -393,7 +357,7 @@ function AppContent() {
         </div>
       </nav>
 
-      <main className="flex-1 w-full max-w-4xl mx-auto p-6 md:p-12">
+      <main className="flex-1 w-full max-w-6xl mx-auto p-6 md:p-10">
         {message && (
           <div className={cn(
             'mb-8 p-4 rounded-xl flex items-center gap-3 font-medium',
@@ -625,6 +589,27 @@ function AppContent() {
               ) : (
                 <Navigate to="/signin" replace />
               )
+            }
+          />
+
+          <Route
+            path="/doctors"
+            element={
+              isSignedIn ? <DoctorsList /> : <Navigate to="/signin" replace />
+            }
+          />
+
+          <Route
+            path="/book/:doctorId"
+            element={
+              isSignedIn ? <BookAppointment patient={patient} /> : <Navigate to="/signin" replace />
+            }
+          />
+
+          <Route
+            path="/appointments"
+            element={
+              isSignedIn ? <MyAppointments patient={patient} /> : <Navigate to="/signin" replace />
             }
           />
 
