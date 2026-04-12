@@ -165,4 +165,67 @@ router.get('/reports', authMiddleware, async (req, res) => {
   }
 });
 
+router.patch('/reports/:reportId', authMiddleware, async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { title, description } = req.body;
+
+    const patient = await resolveCurrentPatient(req.user);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+
+    const report = patient.reports.id(reportId);
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    if (title !== undefined) report.title = title;
+    if (description !== undefined) report.description = description;
+
+    await patient.save();
+
+    return res.json({ message: 'Report updated successfully', report });
+  } catch (error) {
+    console.error('Failed to update report:', error);
+    return res.status(500).json({ message: 'Failed to update report', error: error.message });
+  }
+});
+
+router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
+  try {
+    const { reportId } = req.params;
+
+    const patient = await resolveCurrentPatient(req.user);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+
+    const report = patient.reports.id(reportId);
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    const reportPath = report.filePath?.replace(/^\/+/, '');
+    if (reportPath) {
+      const absolutePath = path.join(__dirname, '..', reportPath);
+      try {
+        await fs.promises.unlink(absolutePath);
+      } catch (unlinkError) {
+        if (unlinkError?.code !== 'ENOENT') {
+          throw unlinkError;
+        }
+      }
+    }
+
+    patient.reports = patient.reports.filter((item) => item._id.toString() !== reportId);
+    await patient.save();
+
+    return res.json({ message: 'Report deleted successfully' });
+  } catch (error) {
+    console.error('Failed to delete report:', error);
+    return res.status(500).json({ message: 'Failed to delete report', error: error.message });
+  }
+});
+
 export default router;

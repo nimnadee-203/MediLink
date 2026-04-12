@@ -41,6 +41,44 @@ const API_BASE_URL_CANDIDATES = Array.from(
   )
 );
 
+const PREVIEW_ORIGIN_CANDIDATES = Array.from(
+  new Set(
+    API_BASE_URL_CANDIDATES
+      .map((url) => {
+        try {
+          return new URL(url).origin;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+  )
+);
+
+const getReportPreviewUrl = (report) => {
+  if (!report) return null;
+
+  const origin = PREVIEW_ORIGIN_CANDIDATES[0] || window.location.origin;
+
+  if (report.filePath) {
+    const normalizedPath = report.filePath.startsWith('/uploads/')
+      ? report.filePath.replace('/uploads/', '/patient-uploads/')
+      : report.filePath;
+
+    if (/^https?:\/\//i.test(normalizedPath)) {
+      return normalizedPath;
+    }
+
+    return `${origin}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
+  }
+
+  if (report.fileName) {
+    return `${origin}/patient-uploads/reports/${encodeURIComponent(report.fileName)}`;
+  }
+
+  return null;
+};
+
 const Card = ({ className, children }) => (
   <div className={cn('bg-white rounded-2xl shadow-xl border border-gray-100 p-8', className)}>
     {children}
@@ -98,6 +136,8 @@ function AppContent() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [reports, setReports] = useState([]);
+  const [editingReportId, setEditingReportId] = useState(null);
+  const [editingReportForm, setEditingReportForm] = useState({ title: '', description: '' });
 
   const patientEmail = patient?.email || '';
   const visibleEmail =
@@ -256,6 +296,63 @@ function AppContent() {
     }
   };
 
+  const onStartEditReport = (report) => {
+    setEditingReportId(report._id);
+    setEditingReportForm({
+      title: report.title || '',
+      description: report.description || ''
+    });
+  };
+
+  const onCancelEditReport = () => {
+    setEditingReportId(null);
+    setEditingReportForm({ title: '', description: '' });
+  };
+
+  const onSaveEditReport = async (reportId) => {
+    setMessage('');
+    try {
+      setLoading(true);
+      await request(`/reports/${reportId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editingReportForm.title,
+          description: editingReportForm.description
+        })
+      });
+      await fetchReports();
+      onCancelEditReport();
+      showSuccess('Report updated successfully');
+    } catch (err) {
+      showError(err, 'Failed to update report');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onDeleteReport = async (reportId) => {
+    setMessage('');
+    const confirmed = window.confirm('Delete this report permanently?');
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      await request(`/reports/${reportId}`, {
+        method: 'DELETE'
+      });
+      await fetchReports();
+      if (editingReportId === reportId) {
+        onCancelEditReport();
+      }
+      showSuccess('Report deleted successfully');
+    } catch (err) {
+      showError(err, 'Failed to delete report');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
       <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
@@ -391,8 +488,79 @@ function AppContent() {
                                 <FileText size={24} />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-gray-900 truncate">{report.title || 'Untitled Report'}</h4>
-                                <p className="text-sm text-gray-500 truncate">{report.fileName}</p>
+                                {editingReportId === report._id ? (
+                                  <div className="space-y-2">
+                                    <Input
+                                      placeholder="Report title"
+                                      value={editingReportForm.title}
+                                      onChange={(e) => setEditingReportForm((prev) => ({ ...prev, title: e.target.value }))}
+                                    />
+                                    <Input
+                                      placeholder="Brief description"
+                                      value={editingReportForm.description}
+                                      onChange={(e) => setEditingReportForm((prev) => ({ ...prev, description: e.target.value }))}
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        className="px-3 py-2 text-sm"
+                                        onClick={() => onSaveEditReport(report._id)}
+                                        disabled={loading}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="px-3 py-2 text-sm"
+                                        onClick={onCancelEditReport}
+                                        disabled={loading}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <h4 className="font-semibold text-gray-900 truncate">{report.title || 'Untitled Report'}</h4>
+                                    <p className="text-sm text-gray-500 truncate">{report.fileName}</p>
+                                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                      {report.description?.trim() || 'No description added.'}
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm font-semibold">
+                                      {getReportPreviewUrl(report) && (
+                                        <a
+                                          href={getReportPreviewUrl(report)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-blue-600 hover:text-blue-700"
+                                        >
+                                          Preview
+                                        </a>
+                                      )}
+                                      {report._id && (
+                                        <button
+                                          type="button"
+                                          className="text-indigo-600 hover:text-indigo-700"
+                                          onClick={() => onStartEditReport(report)}
+                                          disabled={loading}
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                      {report._id && (
+                                        <button
+                                          type="button"
+                                          className="text-red-600 hover:text-red-700"
+                                          onClick={() => onDeleteReport(report._id)}
+                                          disabled={loading}
+                                        >
+                                          Delete
+                                        </button>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             </li>
                           ))}
