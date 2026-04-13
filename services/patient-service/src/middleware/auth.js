@@ -39,7 +39,16 @@ const verifyClerkToken = async (token) => {
   let payload;
 
   if (secretKey) {
-    payload = await verifyToken(token, { secretKey });
+    try {
+      payload = await verifyToken(token, { secretKey });
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        // Dev fallback for mismatched Clerk keys across local services.
+        payload = decodeJwtPayloadUnsafe(token);
+      } else {
+        throw error;
+      }
+    }
   } else if (process.env.NODE_ENV !== 'production') {
     payload = decodeJwtPayloadUnsafe(token);
   } else {

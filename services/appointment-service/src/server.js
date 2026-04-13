@@ -10,6 +10,21 @@ const port = process.env.PORT || 8004;
 const requireDb =
   process.env.REQUIRE_DB === 'true' || process.env.NODE_ENV === 'production';
 
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone'
+  );
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  return next();
+});
+
 app.use(express.json());
 app.use('/api/appointments', appointmentRoutes);
 

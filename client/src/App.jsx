@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  BrowserRouter,
   Link,
   Navigate,
   Route,
@@ -30,6 +29,7 @@ import { SignIn, SignUp, SignedIn, SignedOut, useAuth, useClerk, useUser } from 
 import DoctorsList from './pages/DoctorsList';
 import BookAppointment from './pages/BookAppointment';
 import MyAppointments from './pages/MyAppointments';
+import TelemedicineSession from './pages/TelemedicineSession';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -257,20 +257,26 @@ function AppContent() {
     try {
       setLoading(true);
       const data = await request('/profile');
-      setPatient(data.patient);
-      setCurrentRole(normalizeRole(data.patient?.role));
+      const profile = data?.patient || data?.user || data?.profile || null;
+
+      if (!profile) {
+        throw new Error('Profile response did not include patient data.');
+      }
+
+      setPatient(profile);
+      setCurrentRole(normalizeRole(profile?.role));
 
       const profileName =
-        data.patient?.name && data.patient.name !== 'Clerk User'
-          ? data.patient.name
+        profile?.name && profile.name !== 'Clerk User'
+          ? profile.name
           : clerkDisplayName;
 
       setProfileForm({
         name: profileName || '',
-        phone: data.patient?.phone || clerkPhone || '',
-        age: data.patient?.age || '',
-        gender: data.patient?.gender || '',
-        address: data.patient?.address || ''
+        phone: profile?.phone || clerkPhone || '',
+        age: profile?.age || '',
+        gender: profile?.gender || '',
+        address: profile?.address || ''
       });
     } catch (err) {
       showError(err, 'Failed to fetch profile');
@@ -1715,6 +1721,21 @@ function AppContent() {
             }
           />
 
+          <Route
+            path="/appointments/:appointmentId/telemedicine"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <TelemedicineSession />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -1722,12 +1743,6 @@ function AppContent() {
   );
 }
 
-function App() {
-  return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <AppContent />
-    </BrowserRouter>
-  );
+export default function App() {
+  return <AppContent />;
 }
-
-export default App;
