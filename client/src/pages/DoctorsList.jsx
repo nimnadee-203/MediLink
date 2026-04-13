@@ -1,12 +1,18 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Search, MapPin, Clock, Star, Stethoscope } from 'lucide-react';
 import { cn, Card, Button } from '../components/ui';
 import { mockDoctors, SPECIALITIES } from '../data/mockDoctors';
 
 export default function DoctorsList() {
+  const [searchParams] = useSearchParams();
   const [selectedSpeciality, setSelectedSpeciality] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    setSearchQuery(searchParams.get('q') ?? '');
+    setSelectedSpeciality(searchParams.get('speciality') ?? '');
+  }, [searchParams]);
 
   const filteredDoctors = mockDoctors.filter((doc) => {
     if (!doc.available) return false;

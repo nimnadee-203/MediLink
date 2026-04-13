@@ -2,7 +2,18 @@ import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import {
-  Clock, MapPin, Star, Calendar, ArrowLeft, CheckCircle, AlertCircle
+  Clock,
+  MapPin,
+  Calendar,
+  ArrowLeft,
+  CheckCircle,
+  AlertCircle,
+  Award,
+  Loader2,
+  ChevronRight,
+  Info,
+  Stethoscope,
+  RefreshCw
 } from 'lucide-react';
 import { cn, Card, Button } from '../components/ui';
 import { mockDoctors, TIME_SLOTS } from '../data/mockDoctors';
@@ -26,7 +37,7 @@ function formatDate(date) {
 }
 
 function formatDisplayDate(date) {
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function formatTime12h(time24) {
@@ -36,7 +47,63 @@ function formatTime12h(time24) {
   return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`;
 }
 
-export default function BookAppointment({ patient }) {
+function slotMinutes(time24) {
+  const [h, m] = time24.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function groupSlotsByPeriod(slots, bookedSet) {
+  const morning = [];
+  const afternoon = [];
+  for (const slot of slots) {
+    const mins = slotMinutes(slot);
+    const entry = { slot, booked: bookedSet.has(slot) };
+    if (mins < 12 * 60) morning.push(entry);
+    else afternoon.push(entry);
+  }
+  return { morning, afternoon };
+}
+
+function StepIndicator({ step }) {
+  const steps = [
+    { n: 1, label: 'Date' },
+    { n: 2, label: 'Time' },
+    { n: 3, label: 'Confirm' }
+  ];
+  return (
+    <div className="flex items-center gap-2 sm:gap-4">
+      {steps.map((s, i) => (
+        <React.Fragment key={s.n}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors',
+                step >= s.n
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-500 border border-slate-200'
+              )}
+            >
+              {step > s.n ? <CheckCircle size={16} strokeWidth={2.5} /> : s.n}
+            </span>
+            <span
+              className={cn(
+                'hidden sm:inline text-sm font-medium truncate',
+                step >= s.n ? 'text-slate-900' : 'text-slate-400'
+              )}
+            >
+              {s.label}
+            </span>
+          </div>
+          {i < steps.length - 1 && (
+            <ChevronRight size={16} className="text-slate-300 shrink-0 hidden sm:block" aria-hidden />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+export default function BookAppointment({ patient, profileReady = true, onRetryProfile }) {
   const { doctorId } = useParams();
   const navigate = useNavigate();
   const { getToken } = useAuth();
@@ -51,19 +118,38 @@ export default function BookAppointment({ patient }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
+  /** API returns `id`; some code paths may still use `_id`. */
+  const patientRecordId = useMemo(() => {
+    if (!patient) return null;
+    const raw = patient.id ?? patient._id;
+    return raw != null && raw !== '' ? String(raw) : null;
+  }, [patient]);
+
+  const currentStep = !selectedDate ? 1 : !selectedTime ? 2 : 3;
+
   if (!doctor) {
     return (
-      <Card className="text-center py-16">
-        <AlertCircle className="mx-auto text-red-400 mb-4" size={48} />
-        <p className="text-gray-700 text-lg font-medium">Doctor not found</p>
-        <Button variant="secondary" className="mt-4" onClick={() => navigate('/doctors')}>
-          <ArrowLeft size={18} /> Back to Doctors
-        </Button>
+      <Card className="p-0 overflow-hidden border-slate-200/80 shadow-lg">
+        <div className="px-8 py-16 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-500 mb-5">
+            <AlertCircle size={28} />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900">Provider not found</h2>
+          <p className="text-slate-500 mt-2 max-w-md mx-auto text-sm leading-relaxed">
+            This profile may have been removed or the link is outdated. Return to the directory to choose another clinician.
+          </p>
+          <Button variant="secondary" className="mt-8" onClick={() => navigate('/doctors')}>
+            <ArrowLeft size={18} /> Back to directory
+          </Button>
+        </div>
       </Card>
     );
   }
 
   const bookedSlots = doctor.slots_booked?.[selectedDate ? formatDate(selectedDate) : ''] || [];
+  const bookedSet = useMemo(() => new Set(bookedSlots), [bookedSlots]);
+  const { morning, afternoon } = groupSlotsByPeriod(TIME_SLOTS, bookedSet);
+  const availableCount = TIME_SLOTS.filter((s) => !bookedSet.has(s)).length;
 
   const handleBook = async () => {
     if (!selectedDate || !selectedTime) {
@@ -71,8 +157,20 @@ export default function BookAppointment({ patient }) {
       return;
     }
 
-    if (!patient?._id) {
-      setMessage({ type: 'error', text: 'Patient profile not loaded. Please go to Dashboard first and try again.' });
+    if (!profileReady) {
+      setMessage({
+        type: 'error',
+        text: 'Your profile is still loading. Wait a moment, then try again.'
+      });
+      return;
+    }
+
+    if (!patientRecordId) {
+      setMessage({
+        type: 'error',
+        text:
+          'We could not load your patient record from the server. Check the alert at the top of the page, tap Retry below, or open Profile.'
+      });
       return;
     }
 
@@ -83,7 +181,7 @@ export default function BookAppointment({ patient }) {
       await appointmentRequest('', getToken, {
         method: 'POST',
         body: {
-          patientId: patient._id,
+          patientId: patientRecordId,
           doctorId: doctor._id,
           slotDate: formatDate(selectedDate),
           slotTime: selectedTime,
@@ -92,8 +190,8 @@ export default function BookAppointment({ patient }) {
         }
       });
 
-      setMessage({ type: 'success', text: 'Appointment booked successfully!' });
-      setTimeout(() => navigate('/appointments'), 1500);
+      setMessage({ type: 'success', text: 'Your appointment is confirmed. Redirecting to your visits…' });
+      setTimeout(() => navigate('/appointments'), 1600);
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to book appointment' });
     } finally {
@@ -102,172 +200,358 @@ export default function BookAppointment({ patient }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-4xl mx-auto">
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <nav className="flex items-center gap-2 text-sm text-slate-500 mb-3">
+            <button
+              type="button"
+              onClick={() => navigate('/doctors')}
+              className="hover:text-blue-600 transition-colors"
+            >
+              Find a doctor
+            </button>
+            <ChevronRight size={14} className="text-slate-300 shrink-0" aria-hidden />
+            <span className="text-slate-700 font-medium">Book visit</span>
+          </nav>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+            Schedule a visit
+          </h1>
+          <p className="text-slate-600 mt-2 text-sm sm:text-base max-w-xl leading-relaxed">
+            Choose a convenient slot. You will receive a confirmation in your appointments list. Consultation fees are shown before you confirm.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 sm:shrink-0">
+          <StepIndicator step={currentStep} />
+        </div>
+      </div>
+
       <button
+        type="button"
         onClick={() => navigate('/doctors')}
-        className="flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors font-medium"
+        className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors -mt-2"
       >
-        <ArrowLeft size={18} /> Back to Doctors
+        <ArrowLeft size={18} /> Back to directory
       </button>
 
-      {message && (
-        <div className={cn(
-          'p-4 rounded-xl flex items-center gap-3 font-medium',
-          message.type === 'error'
-            ? 'bg-red-50 text-red-700 border border-red-200'
-            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-        )}>
-          {message.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
-          {message.text}
+      {!profileReady && (
+        <div
+          className="rounded-xl border border-blue-200 bg-blue-50/90 px-4 py-3.5 flex items-start gap-3 text-sm text-blue-900"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 size={20} className="shrink-0 mt-0.5 animate-spin text-blue-600" />
+          <div>
+            <p className="font-semibold">Loading your patient profile…</p>
+            <p className="text-blue-800/90 mt-1 leading-relaxed">
+              You can choose a date and time now. The confirm button stays disabled until your record is ready.
+            </p>
+          </div>
         </div>
       )}
 
-      <Card className="p-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
-          <img
-            src={doctor.image}
-            alt={doctor.name}
-            className="w-20 h-20 rounded-2xl border-2 border-white/30 object-cover"
-          />
-          <div className="flex-1">
-            <h2 className="text-2xl font-bold text-white">{doctor.name}</h2>
-            <p className="text-blue-100 mt-1">{doctor.speciality} &middot; {doctor.degree}</p>
-            <div className="flex flex-wrap gap-4 mt-3 text-sm text-blue-100">
-              <span className="flex items-center gap-1"><Clock size={14} /> {doctor.experience}</span>
-              <span className="flex items-center gap-1"><MapPin size={14} /> {doctor.address}</span>
-              <span className="flex items-center gap-1"><Star size={14} /> {doctor.degree}</span>
+      {profileReady && !patientRecordId && (
+        <div
+          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-4 text-sm text-red-900"
+          role="alert"
+        >
+          <div className="flex items-start gap-3 flex-1">
+            <AlertCircle size={20} className="shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Patient record unavailable</p>
+              <p className="text-red-800/90 mt-1 leading-relaxed">
+                The app could not reach your profile (patient service off, network error, or sign-in issue). Fix the red
+                message in the header if shown, then retry.
+              </p>
             </div>
           </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-6 py-4 text-center">
-            <p className="text-blue-100 text-xs uppercase tracking-wider">Consultation Fee</p>
-            <p className="text-3xl font-bold text-white mt-1">Rs. {doctor.fees.toLocaleString()}</p>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {typeof onRetryProfile === 'function' && (
+              <Button type="button" variant="secondary" className="rounded-xl" onClick={() => onRetryProfile()}>
+                <RefreshCw size={18} />
+                Retry profile
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-xl w-full sm:w-auto"
+              onClick={() => navigate('/profile')}
+            >
+              Open profile
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div
+          role="alert"
+          className={cn(
+            'rounded-xl border px-4 py-3.5 flex items-start gap-3 text-sm',
+            message.type === 'error'
+              ? 'bg-red-50 text-red-800 border-red-200'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+          )}
+        >
+          {message.type === 'error' ? (
+            <AlertCircle size={20} className="shrink-0 mt-0.5" />
+          ) : (
+            <CheckCircle size={20} className="shrink-0 mt-0.5" />
+          )}
+          <span className="font-medium leading-snug">{message.text}</span>
+        </div>
+      )}
+
+      <Card className="p-0 overflow-hidden border-slate-200/80 shadow-lg">
+        <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 py-8 sm:px-8 sm:py-10">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.03\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-90" aria-hidden />
+          <div className="relative flex flex-col lg:flex-row gap-8 items-start">
+            <img
+              src={doctor.image}
+              alt=""
+              className="w-24 h-24 rounded-2xl border-2 border-white/20 object-cover shadow-xl ring-1 ring-white/10"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-widest text-teal-300/90 mb-2">
+                In-person consultation
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{doctor.name}</h2>
+              <p className="text-slate-300 mt-1.5 font-medium">{doctor.speciality}</p>
+              <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4 text-sm text-slate-300">
+                <span className="inline-flex items-center gap-1.5">
+                  <Award size={15} className="text-teal-400 shrink-0" />
+                  {doctor.degree}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock size={15} className="text-teal-400 shrink-0" />
+                  {doctor.experience}
+                </span>
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <MapPin size={15} className="text-teal-400 shrink-0" />
+                  <span className="truncate">{doctor.address}</span>
+                </span>
+              </div>
+            </div>
+            <div className="w-full lg:w-auto lg:min-w-[200px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 px-6 py-5 text-center lg:text-left">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Consultation fee</p>
+              <p className="text-3xl font-bold text-white mt-2 tabular-nums">
+                Rs. {doctor.fees.toLocaleString()}
+              </p>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                Billed as shown. Payment terms follow clinic policy.
+              </p>
+            </div>
           </div>
         </div>
       </Card>
 
-      <Card>
-        <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <Calendar className="text-blue-600" /> Select Date
-        </h3>
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {availableDays.map((day) => {
-            const dateStr = formatDate(day);
-            const isSelected = selectedDate && formatDate(selectedDate) === dateStr;
-            const isToday = formatDate(new Date()) === dateStr;
-
-            return (
-              <button
-                key={dateStr}
-                onClick={() => { setSelectedDate(day); setSelectedTime(null); }}
-                className={cn(
-                  'flex-shrink-0 flex flex-col items-center px-4 py-3 rounded-xl border-2 transition-all duration-200 min-w-[80px]',
-                  isSelected
-                    ? 'border-blue-600 bg-blue-600 text-white shadow-lg'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
-                )}
-              >
-                <span className="text-xs font-medium uppercase">
-                  {day.toLocaleDateString('en-US', { weekday: 'short' })}
-                </span>
-                <span className="text-2xl font-bold mt-1">{day.getDate()}</span>
-                <span className="text-xs mt-0.5">
-                  {day.toLocaleDateString('en-US', { month: 'short' })}
-                </span>
-                {isToday && (
-                  <span className={cn(
-                    'text-[10px] font-semibold mt-1',
-                    isSelected ? 'text-blue-100' : 'text-blue-600'
-                  )}>
-                    Today
-                  </span>
-                )}
-              </button>
-            );
-          })}
+      <Card className="border-slate-200/80 shadow-md p-6 sm:p-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <Calendar size={18} />
+              </span>
+              Select a date
+            </h3>
+            <p className="text-slate-500 text-sm mt-1">
+              Sundays are skipped. {availableCount} time slots offered per day.
+            </p>
+          </div>
         </div>
-      </Card>
-
-      {selectedDate && (
-        <Card>
-          <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
-            <Clock className="text-blue-600" /> Select Time Slot
-          </h3>
-          <p className="text-gray-500 text-sm mb-6">
-            Available slots for {formatDisplayDate(selectedDate)}
-          </p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-            {TIME_SLOTS.map((slot) => {
-              const isBooked = bookedSlots.includes(slot);
-              const isSelected = selectedTime === slot;
+        <div className="relative -mx-1">
+          <div className="flex gap-2 overflow-x-auto pb-2 px-1 scrollbar-thin snap-x snap-mandatory">
+            {availableDays.map((day) => {
+              const dateStr = formatDate(day);
+              const isSelected = selectedDate && formatDate(selectedDate) === dateStr;
+              const isToday = formatDate(new Date()) === dateStr;
 
               return (
                 <button
-                  key={slot}
-                  disabled={isBooked}
-                  onClick={() => setSelectedTime(slot)}
+                  key={dateStr}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate(day);
+                    setSelectedTime(null);
+                  }}
                   className={cn(
-                    'py-3 px-2 rounded-xl text-sm font-semibold border-2 transition-all duration-200',
-                    isBooked && 'bg-gray-100 text-gray-400 border-gray-100 cursor-not-allowed line-through',
-                    isSelected && !isBooked && 'border-blue-600 bg-blue-600 text-white shadow-lg',
-                    !isSelected && !isBooked && 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+                    'snap-start flex-shrink-0 flex flex-col items-center px-4 py-3.5 rounded-xl border transition-all duration-200 min-w-[88px]',
+                    isSelected
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-md ring-2 ring-blue-600/20'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-slate-50'
                   )}
                 >
-                  {formatTime12h(slot)}
+                  <span className="text-[11px] font-semibold uppercase tracking-wide opacity-90">
+                    {day.toLocaleDateString('en-US', { weekday: 'short' })}
+                  </span>
+                  <span className="text-2xl font-bold mt-1 tabular-nums">{day.getDate()}</span>
+                  <span className="text-xs mt-0.5 opacity-80">
+                    {day.toLocaleDateString('en-US', { month: 'short' })}
+                  </span>
+                  {isToday && (
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold mt-1.5 uppercase tracking-wide',
+                        isSelected ? 'text-blue-100' : 'text-blue-600'
+                      )}
+                    >
+                      Today
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
+        </div>
+      </Card>
+
+      {selectedDate && (
+        <Card className="border-slate-200/80 shadow-md p-6 sm:p-8">
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <Clock size={18} />
+              </span>
+              Select a time
+            </h3>
+            <p className="text-slate-500 text-sm mt-1">
+              Times are shown in your local timezone ·{' '}
+              <span className="font-medium text-slate-700">{formatDisplayDate(selectedDate)}</span>
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-4 text-xs mb-6">
+            <span className="inline-flex items-center gap-2 text-slate-600">
+              <span className="h-3 w-3 rounded-sm border-2 border-slate-300 bg-white" /> Available
+            </span>
+            <span className="inline-flex items-center gap-2 text-slate-400">
+              <span className="h-3 w-3 rounded-sm bg-slate-100 border border-slate-200" /> Unavailable
+            </span>
+          </div>
+
+          {[{ label: 'Morning', items: morning }, { label: 'Afternoon', items: afternoon }].map(
+            (block) =>
+              block.items.length > 0 && (
+                <div key={block.label} className="mb-8 last:mb-0">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+                    {block.label}
+                  </p>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
+                    {block.items.map(({ slot, booked }) => {
+                      const isSelected = selectedTime === slot;
+                      return (
+                        <button
+                          key={slot}
+                          type="button"
+                          disabled={booked}
+                          onClick={() => setSelectedTime(slot)}
+                          className={cn(
+                            'py-3 px-2 rounded-xl text-sm font-semibold border transition-all duration-200',
+                            booked &&
+                              'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed line-through decoration-slate-300',
+                            isSelected &&
+                              !booked &&
+                              'border-blue-600 bg-blue-600 text-white shadow-md ring-2 ring-blue-600/15',
+                            !isSelected &&
+                              !booked &&
+                              'border-slate-200 bg-white text-slate-800 hover:border-blue-400 hover:bg-blue-50/50'
+                          )}
+                        >
+                          {formatTime12h(slot)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )
+          )}
         </Card>
       )}
 
       {selectedDate && selectedTime && (
-        <Card>
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Booking Details</h3>
+        <Card className="border-slate-200/80 shadow-md p-6 sm:p-8">
+          <h3 className="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <Stethoscope size={18} />
+            </span>
+            Confirm booking
+          </h3>
+          <p className="text-slate-500 text-sm mb-6">
+            Add a short clinical note if you wish. This helps the clinician prepare for your visit.
+          </p>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reason for Visit (optional)
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label htmlFor="visit-reason" className="text-sm font-medium text-slate-700">
+                  Reason for visit </label>
+                <span className="text-xs text-slate-400 tabular-nums">{reason.length}/500</span>
+              </div>
               <textarea
+                id="visit-reason"
                 value={reason}
+                maxLength={500}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Describe your symptoms or reason for the appointment..."
-                rows={3}
-                className="block w-full rounded-xl border border-gray-200 bg-gray-50 py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all outline-none resize-none"
+                placeholder="e.g. follow-up for blood pressure, new rash, medication review…"
+                rows={4}
+                className="block w-full rounded-xl border border-slate-200 bg-white py-3 px-4 text-slate-900 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600/30 focus:border-blue-500 transition-all outline-none resize-none shadow-sm"
               />
             </div>
 
-            <div className="bg-blue-50 rounded-xl p-5 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Doctor</span>
-                <span className="font-semibold text-gray-900">{doctor.name}</span>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5 space-y-0 divide-y divide-slate-200/80">
+              {[
+                ['Clinician', doctor.name],
+                ['Specialty', doctor.speciality],
+                ['Date', formatDisplayDate(selectedDate)],
+                ['Time', formatTime12h(selectedTime)],
+                ['Location', doctor.address]
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4 py-3 first:pt-0 text-sm">
+                  <span className="text-slate-500">{k}</span>
+                  <span className="font-medium text-slate-900 text-right">{v}</span>
+                </div>
+              ))}
+              <div className="flex justify-between items-baseline gap-4 pt-4">
+                <span className="text-sm font-semibold text-slate-700">Total due</span>
+                <span className="text-xl font-bold text-blue-600 tabular-nums">
+                  Rs. {doctor.fees.toLocaleString()}
+                </span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Date</span>
-                <span className="font-semibold text-gray-900">{formatDisplayDate(selectedDate)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Time</span>
-                <span className="font-semibold text-gray-900">{formatTime12h(selectedTime)}</span>
-              </div>
-              <div className="flex justify-between text-sm pt-2 border-t border-blue-100">
-                <span className="text-gray-600 font-medium">Total Amount</span>
-                <span className="font-bold text-blue-600 text-lg">Rs. {doctor.fees.toLocaleString()}</span>
-              </div>
+            </div>
+
+            <div className="flex gap-3 rounded-xl bg-blue-50/80 border border-blue-100 px-4 py-3 text-sm text-slate-700">
+              <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                You can reschedule or cancel from <strong>My appointments</strong> while the visit is still pending or
+                confirmed, subject to clinic cut-off times.
+              </p>
             </div>
 
             <Button
               onClick={handleBook}
-              disabled={loading}
-              className="w-full py-4 text-base"
+              disabled={loading || !profileReady || !patientRecordId}
+              className="w-full py-4 text-base rounded-xl"
             >
               {loading ? (
-                'Booking...'
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Confirming…
+                </>
+              ) : !profileReady ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Waiting for profile…
+                </>
+              ) : !patientRecordId ? (
+                <>
+                  <AlertCircle size={20} />
+                  Profile required to confirm
+                </>
               ) : (
                 <>
                   <CheckCircle size={20} />
-                  Confirm Appointment — Rs. {doctor.fees.toLocaleString()}
+                  Confirm appointment — Rs. {doctor.fees.toLocaleString()}
                 </>
               )}
             </Button>

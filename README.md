@@ -32,7 +32,7 @@ Gateway proxy (from `api-gateway`):
 
 ### Environment Variables (Patient Service)
 - `PORT` (default: `8002`)
-- `MONGO_URI` (default: `mongodb://localhost:27017/medisync`)
+- `MONGO_URI` (required) — local: `mongodb://localhost:27017/medisync`; **MongoDB Atlas**: use the `mongodb+srv://...` string from Atlas (include the database name in the path, e.g. `/medisync`). Allow your IP in Atlas **Network Access**.
 - `CLERK_SECRET_KEY` (required)
 
 ## Patient + Auth Frontend (React)

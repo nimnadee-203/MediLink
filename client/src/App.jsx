@@ -17,13 +17,15 @@ import {
   Calendar,
   AlertCircle,
   Stethoscope,
-  ClipboardList
+  ClipboardList,
+  Home
 } from 'lucide-react';
 import { SignIn, SignUp, SignedIn, SignedOut, UserButton, useAuth, useUser } from '@clerk/clerk-react';
 import { cn, Card, Input, Button } from './components/ui';
 import DoctorsList from './pages/DoctorsList';
 import BookAppointment from './pages/BookAppointment';
 import MyAppointments from './pages/MyAppointments';
+import HomePage from './pages/HomePage';
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 const API_BASE_URL_CANDIDATES = Array.from(
@@ -150,9 +152,14 @@ function AppContent() {
       }
     }
 
+    const isNetworkFailure =
+      lastFailure?.name === 'TypeError' ||
+      lastFailure?.message === 'Failed to fetch' ||
+      lastFailure?.message === 'NetworkError when attempting to fetch resource.';
     throw new Error(
-      lastFailure?.message ||
-      'Cannot connect to backend. Start Patient Service (port 8002), API Gateway (port 8000), and MongoDB.'
+      isNetworkFailure
+        ? 'Cannot reach the API. Start MongoDB, then the API gateway (port 8000) or patient service (port 8002), and confirm client/.env has VITE_API_BASE_URL=http://localhost:8000/api/patients'
+        : lastFailure?.message || 'Request failed'
     );
   };
 
@@ -311,16 +318,21 @@ function AppContent() {
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
       <nav className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 w-full h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
             <div className="bg-blue-600 p-2 rounded-lg text-white">
               <Activity size={24} />
             </div>
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
               MediSync AI
             </span>
-          </div>
+          </Link>
 
-          <div className="flex gap-2 sm:gap-3 items-center">
+          <div className="flex gap-2 sm:gap-3 items-center flex-wrap justify-end">
+            <Link to="/">
+              <Button variant={location.pathname === '/' ? 'primary' : 'secondary'} className="px-3 py-2 text-sm rounded-lg">
+                <Home size={16} /> <span className="hidden sm:inline">Home</span>
+              </Button>
+            </Link>
             <SignedIn>
               <Link to="/dashboard">
                 <Button variant={location.pathname === '/dashboard' ? 'primary' : 'secondary'} className="px-3 py-2 text-sm rounded-lg">
@@ -342,7 +354,7 @@ function AppContent() {
                   <User size={16} /> <span className="hidden sm:inline">Profile</span>
                 </Button>
               </Link>
-              <UserButton afterSignOutUrl="/signin" />
+              <UserButton afterSignOutUrl="/" />
             </SignedIn>
 
             <SignedOut>
@@ -369,15 +381,27 @@ function AppContent() {
         )}
 
         <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/doctor" element={<Navigate to="/" replace />} />
+          <Route path="/doctor/*" element={<Navigate to="/" replace />} />
+          <Route path="/admin" element={<Navigate to="/" replace />} />
+          <Route path="/admin/*" element={<Navigate to="/" replace />} />
+
           <Route
             path="/signin/*"
             element={
               isSignedIn ? (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/" replace />
               ) : (
                 <div className="max-w-md mx-auto">
                   <Card className="p-4 md:p-6">
-                    <SignIn routing="path" path="/signin" signUpUrl="/signup" />
+                    <SignIn
+                      routing="path"
+                      path="/signin"
+                      signUpUrl="/signup"
+                      fallbackRedirectUrl="/"
+                      forceRedirectUrl="/"
+                    />
                   </Card>
                 </div>
               )
@@ -388,11 +412,17 @@ function AppContent() {
             path="/signup/*"
             element={
               isSignedIn ? (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/" replace />
               ) : (
                 <div className="max-w-md mx-auto">
                   <Card className="p-4 md:p-6">
-                    <SignUp routing="path" path="/signup" signInUrl="/signin" />
+                    <SignUp
+                      routing="path"
+                      path="/signup"
+                      signInUrl="/signin"
+                      fallbackRedirectUrl="/"
+                      forceRedirectUrl="/"
+                    />
                   </Card>
                 </div>
               )
@@ -613,8 +643,7 @@ function AppContent() {
             }
           />
 
-          <Route path="/" element={<Navigate to={isSignedIn ? '/dashboard' : '/signin'} replace />} />
-          <Route path="*" element={<Navigate to={isSignedIn ? '/dashboard' : '/signin'} replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
