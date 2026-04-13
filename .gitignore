@@ -10,6 +10,8 @@ build/
 out/
 .vercel
 .turbo
+.vite/
+.vite-inspect/
 
 # Environment Variables
 .env
