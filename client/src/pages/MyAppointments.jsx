@@ -14,11 +14,13 @@ import {
   CalendarDays,
   ClipboardList,
   RefreshCw,
-  Loader2
+  Loader2,
+  Video
 } from 'lucide-react';
 import { cn, Card, Button, StatusBadge } from '../components/ui';
 import { mockDoctors } from '../data/mockDoctors';
 import { appointmentRequest } from '../lib/api';
+import { getResolvedVisitMode } from '../lib/telemedicine';
 
 function formatTime12h(time24) {
   if (!time24) return '';
@@ -311,6 +313,8 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
           {sortedFiltered.map((apt) => {
             const doctor = getDoctorInfo(apt.doctorId);
             const isCancellable = ['pending', 'confirmed'].includes(apt.status);
+            const visitMode = getResolvedVisitMode(apt, doctor);
+            const canJoinVideo = visitMode === 'telemedicine' && ['pending', 'confirmed'].includes(apt.status);
             const { weekday, day, month } = formatShortDate(apt.slotDate);
             const accent =
               apt.status === 'pending'
@@ -362,6 +366,19 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                             <p className="text-slate-600 text-sm font-medium mt-0.5">
                               {doctor?.speciality || 'Medical specialty'}
                             </p>
+                            <p className="text-xs mt-2">
+                              <span
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold border',
+                                  visitMode === 'telemedicine'
+                                    ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                )}
+                              >
+                                {visitMode === 'telemedicine' ? <Video size={12} /> : <MapPin size={12} />}
+                                {visitMode === 'telemedicine' ? 'Telemedicine' : 'In-person'}
+                              </span>
+                            </p>
                             {doctor?.address && (
                               <p className="text-slate-500 text-xs mt-2 flex items-center gap-1.5">
                                 <MapPin size={12} className="shrink-0" />
@@ -403,15 +420,28 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                             Need to change plans? Cancel here if your clinic allows patient-side cancellation for this
                             visit.
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => handleCancel(apt.id)}
-                            disabled={cancellingId === apt.id}
-                            className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50 shrink-0"
-                          >
-                            <XCircle size={16} />
-                            {cancellingId === apt.id ? 'Cancelling…' : 'Cancel visit'}
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                            {canJoinVideo && (
+                              <Link to={`/appointments/${apt.id}/telemedicine`}>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-blue-700 hover:text-white hover:bg-blue-700 border border-blue-200 hover:border-blue-700 px-4 py-2.5 rounded-xl transition-colors shrink-0"
+                                >
+                                  <Video size={16} />
+                                  Join video
+                                </button>
+                              </Link>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleCancel(apt.id)}
+                              disabled={cancellingId === apt.id}
+                              className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50 shrink-0"
+                            >
+                              <XCircle size={16} />
+                              {cancellingId === apt.id ? 'Cancelling…' : 'Cancel visit'}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
