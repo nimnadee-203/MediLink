@@ -1,17 +1,88 @@
-import React from 'react';
+import React, { useContext, useState } from 'react';
 import { assets } from '../assets/assets.js';
+import { AdminContext } from '../context/AdminContext';
+import { toast } from 'react-toastify';
+import axios from 'axios';
 
 const AddDoctor = () => {
+  const [docImg, setDocImg] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [experience, setExperience] = useState('1 Year');
+  const [fees, setFees] = useState('');
+  const [about, setAbout] = useState('');
+  const [speciality, setSpeciality] = useState('General Physician');
+  const [degree, setDegree] = useState('');
+  const [address, setAddress] = useState('');
+
+  const { backendUrl, aToken } = useContext(AdminContext);
+
+  const onSubmitHandler = async (event) => {
+    event.preventDefault();
+
+    try {
+      if (!docImg) {
+        return toast.error('Image Not Selected');
+      }
+
+      const formData = new FormData();
+      formData.append('image', docImg);
+      formData.append('name', name);
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('experience', experience);
+      formData.append('fees', Number(fees));
+      formData.append('about', about);
+      formData.append('speciality', speciality);
+      formData.append('degree', degree);
+      formData.append('address', address);
+      formData.append('available', true); // Default available
+      formData.append('status', 'approved'); // satisfy backend validation
+
+      const { data } = await axios.post(backendUrl + '/api/admin/add-doctor', formData, {
+        headers: { atoken: aToken }
+      });
+
+      if (data.success) {
+        toast.success(data.message);
+        // Reset Form
+        setDocImg(false);
+        setName('');
+        setEmail('');
+        setPassword('');
+        setAddress('');
+        setDegree('');
+        setFees('');
+        setAbout('');
+      } else {
+        toast.error(data.message);
+      }
+
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message);
+      console.log(error);
+    }
+  };
+
   return (
-    <form className="add-doctor-wrapper">
+    <form onSubmit={onSubmitHandler} className="add-doctor-wrapper">
       <h2 className="add-doctor-title">Add Doctor</h2>
 
       <div className="add-doctor-container">
         <div className="upload-section">
           <label htmlFor="doc-img" className="upload-label">
-            <img src={assets.upload_area} alt="Upload" />
+            <img 
+              src={docImg ? URL.createObjectURL(docImg) : assets.upload_area} 
+              alt="Upload" 
+            />
           </label>
-          <input type="file" id="doc-img" hidden />
+          <input 
+            onChange={(e) => setDocImg(e.target.files[0])} 
+            type="file" 
+            id="doc-img" 
+            hidden 
+          />
           <p className="upload-text">
             Upload doctor <br /> picture
           </p>
@@ -20,13 +91,23 @@ const AddDoctor = () => {
         <div className="doctor-form-grid">
           <div className="form-item">
             <p>Doctor Name</p>
-            <input type="text" placeholder="Name" required />
+            <input 
+              onChange={(e) => setName(e.target.value)} 
+              value={name} 
+              type="text" 
+              placeholder="Name" 
+              required 
+            />
           </div>
 
           <div className="form-item">
             <p>Speciality</p>
-            <select name="speciality" required>
-              <option value="" disabled selected>Select Speciality</option>
+            <select 
+              onChange={(e) => setSpeciality(e.target.value)} 
+              value={speciality} 
+              name="speciality" 
+              required
+            >
               <option value="General Physician">General Physician</option>
               <option value="Gynecologist">Gynecologist</option>
               <option value="Dermatologist">Dermatologist</option>
@@ -38,28 +119,56 @@ const AddDoctor = () => {
 
           <div className="form-item">
             <p>Doctor Email</p>
-            <input type="email" placeholder="Email" required />
+            <input 
+              onChange={(e) => setEmail(e.target.value)} 
+              value={email} 
+              type="email" 
+              placeholder="Email" 
+              required 
+            />
           </div>
 
           <div className="form-item">
-            <p>Education</p>
-            <input type="text" placeholder="Education" required />
+            <p>Degree</p>
+            <input 
+              onChange={(e) => setDegree(e.target.value)} 
+              value={degree} 
+              type="text" 
+              placeholder="Degree" 
+              required 
+            />
           </div>
 
           <div className="form-item">
             <p>Doctor Password</p>
-            <input type="password" placeholder="Password" required />
+            <input 
+              onChange={(e) => setPassword(e.target.value)} 
+              value={password} 
+              type="password" 
+              placeholder="Password" 
+              required 
+            />
           </div>
 
           <div className="form-item">
             <p>Address</p>
-            <input type="text" placeholder="Address" required />
+            <input 
+              onChange={(e) => setAddress(e.target.value)} 
+              value={address} 
+              type="text" 
+              placeholder="Address" 
+              required 
+            />
           </div>
 
           <div className="form-item">
             <p>Experience</p>
-            <select name="experience" required>
-              <option value="" disabled selected>Select Experience</option>
+            <select 
+              onChange={(e) => setExperience(e.target.value)} 
+              value={experience} 
+              name="experience" 
+              required
+            >
               <option value="1 Year">1 Year</option>
               <option value="2 Year">2 Year</option>
               <option value="3 Year">3 Year</option>
@@ -75,13 +184,25 @@ const AddDoctor = () => {
 
           <div className="form-item">
             <p>Fees</p>
-            <input type="number" placeholder="Fee" required />
+            <input 
+              onChange={(e) => setFees(e.target.value)} 
+              value={fees} 
+              type="number" 
+              placeholder="Fee" 
+              required 
+            />
           </div>
         </div>
 
         <div className="form-item about-section">
           <p>About Doctor</p>
-          <textarea placeholder="Write about doctor" rows={5} required />
+          <textarea 
+            onChange={(e) => setAbout(e.target.value)} 
+            value={about} 
+            placeholder="Write about doctor" 
+            rows={5} 
+            required 
+          />
         </div>
 
         <button type="submit" className="submit-btn">

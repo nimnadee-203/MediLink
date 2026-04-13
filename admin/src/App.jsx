@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Appointments from './pages/Appointments';
 import AddDoctor from './pages/AddDoctor';
 import DoctorList from './pages/DoctorList';
+import DoctorProfile from './pages/DoctorProfile';
 import Login from './pages/Login';
 import { AdminContext } from './context/AdminContext';
 
@@ -32,6 +33,7 @@ function App() {
           <Route path="appointments" element={<Appointments />} />
           <Route path="add-doctor" element={<AddDoctor />} />
           <Route path="doctors" element={<DoctorList />} />
+          <Route path="doctor/:docId" element={<DoctorProfile />} />
         </Route>
       </Routes>
     </>
