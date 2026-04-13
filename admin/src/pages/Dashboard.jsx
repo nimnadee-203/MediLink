@@ -1,10 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Stethoscope, ClipboardList, TrendingUp } from 'lucide-react';
-import { Card } from '../../components/ui';
+import { Card } from '../components/ui';
 
 const Dashboard = () => (
-<<<<<<< HEAD:client/src/pages/Admin/Dashboard.jsx
   <div className="space-y-6">
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {[
@@ -21,15 +20,6 @@ const Dashboard = () => (
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mt-1">{label}</p>
         </Card>
       ))}
-=======
-
- 
-
-  <div>
-    <h2>Dashboard</h2>
-    <div className="card">
-      <p>Welcome to the Admin Dashboard. Summary of statistics will appear here.</p>
->>>>>>> feature/admin-panel:admin/src/pages/Dashboard.jsx
     </div>
     <Card className="p-8 border-slate-200 rounded-2xl shadow-md">
       <h2 className="text-lg font-bold text-slate-900">Operations overview</h2>
