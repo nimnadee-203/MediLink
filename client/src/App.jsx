@@ -27,6 +27,9 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SignIn, SignUp, SignedIn, SignedOut, useAuth, useClerk, useUser } from '@clerk/clerk-react';
+import DoctorsList from './pages/DoctorsList';
+import BookAppointment from './pages/BookAppointment';
+import MyAppointments from './pages/MyAppointments';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -309,11 +312,20 @@ function AppContent() {
       return;
     }
 
-    const shouldLoadProtectedData = location.pathname === '/dashboard' || location.pathname === '/profile';
+    const path = location.pathname;
+    const shouldLoadProtectedData =
+      path === '/dashboard' ||
+      path === '/profile' ||
+      path === '/doctors' ||
+      path === '/appointments' ||
+      path.startsWith('/book/');
     if (shouldLoadProtectedData) {
       setIsRoleResolved(false);
-      fetchProfile();
-      fetchReports();
+      const loadProtectedData = async () => {
+        await fetchProfile();
+        await fetchReports();
+      };
+      loadProtectedData();
     } else {
       setIsRoleResolved(true);
     }
@@ -1392,23 +1404,15 @@ function AppContent() {
                       )}
 
                       {patientSection === 'doctors' && hasPrivilege('browse_doctors') && (
-                        <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
-                          <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Browse Doctors</h3>
-                          <p className="text-slate-500 font-medium text-sm mt-1">Find doctors by specialty and review available consultation slots.</p>
-                          <div className="mt-6 p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <p className="text-slate-700 font-medium">Doctor listing module can be merged into this patient-only section.</p>
-                          </div>
-                        </Card>
+                        <DoctorsList />
                       )}
 
                       {patientSection === 'appointments' && hasPrivilege('book_appointments') && (
-                        <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
-                          <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Book Appointments</h3>
-                          <p className="text-slate-500 font-medium text-sm mt-1">Schedule appointments with your selected doctors.</p>
-                          <div className="mt-6 p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <p className="text-slate-700 font-medium">Appointment booking component can be merged here safely.</p>
-                          </div>
-                        </Card>
+                        <MyAppointments
+                          patient={patient}
+                          profileReady={isRoleResolved}
+                          onRetryProfile={fetchProfile}
+                        />
                       )}
 
                       {patientSection === 'consultations' && hasPrivilege('video_consultations') && (
@@ -1660,6 +1664,51 @@ function AppContent() {
                     </div>
                   </form>
                 </Card>
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/doctors"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <DoctorsList />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/book/:doctorId"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <BookAppointment patient={patient} profileReady={isRoleResolved} onRetryProfile={fetchProfile} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/appointments"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <MyAppointments patient={patient} profileReady={isRoleResolved} onRetryProfile={fetchProfile} />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
               ) : (
                 <Navigate to="/signin" replace />
               )
