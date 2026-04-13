@@ -10,6 +10,11 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+const hasValidClerkSecret = () => {
+  const secret = process.env.CLERK_SECRET_KEY;
+  return Boolean(secret && !/replace_with/i.test(secret));
+};
+
 const app = express();
 const port = process.env.PORT || 8002;
 
@@ -27,6 +32,9 @@ app.get('/health', (_req, res) => {
 
 const startServer = async () => {
     await connectDB();
+  if (!hasValidClerkSecret()) {
+    console.warn('[patient-service] CLERK_SECRET_KEY is missing/placeholder. Admin user creation will not create Clerk auth accounts.');
+  }
     app.listen(port, () => {
         console.log(`Patient Service listening at http://localhost:${port}`);
     });
