@@ -117,3 +117,76 @@ export const adminDashboard = async (req,res)=>{
     }
 }
 
+// API to get all doctors list for admin panel
+export const allDoctors = async (req,res) => {
+    try {
+        const doctors = await doctorModel.find({}).select('-password')
+        res.json({success:true,doctors})
+
+    } catch (error) {
+        console.log(error)
+        res.json({success:false,message:error.message})
+    }
+}
+
+// API to change doctor availability for admin panel
+export const changeAvailability = async (req,res) => {
+    try {
+        const {docId} = req.body
+        const docData = await doctorModel.findById(docId)
+        await doctorModel.findByIdAndUpdate(docId,{available: !docData.available})
+        res.json({success:true, message: 'Availability Changed'})
+
+    } catch (error) {
+        console.log(error)
+        res.json({success:false,message:error.message})
+    }
+}
+
+// API to update doctor details (excluding password)
+export const updateDoctor = async (req, res) => {
+    try {
+        const { docId, name, speciality, degree, experience, about, fees, address, status, available } = req.body
+        const imageFile = req.file
+
+        const updateData = {
+            name,
+            speciality,
+            degree,
+            experience,
+            about,
+            fees,
+            address,
+            status,
+            available: available === 'true' || available === true
+        }
+
+        if (imageFile) {
+            const imageUpload = await cloudinary.uploader.upload(imageFile.path, { resource_type: "image" })
+            updateData.image = imageUpload.secure_url
+        }
+
+        await doctorModel.findByIdAndUpdate(docId, updateData)
+        res.json({ success: true, message: "Doctor Updated Successfully" })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+// API to delete a doctor
+export const deleteDoctor = async (req, res) => {
+    try {
+        const { docId } = req.body
+        await doctorModel.findByIdAndDelete(docId)
+        res.json({ success: true, message: "Doctor Deleted Successfully" })
+
+    } catch (error) {
+        console.log(error)
+        res.json({ success: false, message: error.message })
+    }
+}
+
+
+
