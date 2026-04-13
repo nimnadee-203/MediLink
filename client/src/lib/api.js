@@ -42,8 +42,13 @@ export async function appointmentRequest(path, getToken, options = {}) {
     }
   }
 
+  const isNetworkFailure =
+    lastFailure?.name === 'TypeError' ||
+    lastFailure?.message === 'Failed to fetch' ||
+    lastFailure?.message === 'NetworkError when attempting to fetch resource.';
   throw new Error(
-    lastFailure?.message ||
-    'Cannot connect to Appointment Service. Start it on port 8004 (or API Gateway on port 8000) and MongoDB.'
+    isNetworkFailure
+      ? 'Cannot reach appointments API. Start MongoDB, appointment service (port 8004) or API gateway (port 8000).'
+      : lastFailure?.message || 'Appointment request failed'
   );
 }
