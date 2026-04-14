@@ -610,81 +610,184 @@ function AppContent() {
           <Route
             path="/"
             element={
-              <div className="space-y-12">
-                {/* Hero Section */}
-                <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white shadow-2xl border border-white/10">
+              <div className="space-y-10 md:space-y-12 pb-6">
+                <section className="relative overflow-hidden rounded-[2.3rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white shadow-2xl border border-white/10">
                   <div className="absolute top-0 right-0 -mr-20 -mt-20 w-72 h-72 rounded-full bg-blue-500/20 blur-[80px]"></div>
-                  <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-purple-500/20 blur-[80px]"></div>
-                  
-                  <div className="relative z-10 p-10 md:p-20 text-center flex flex-col items-center">
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-blue-200 text-sm font-medium mb-8 backdrop-blur-md">
-                      <Activity size={16} /> Welcome to MediSync AI
+                  <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-indigo-500/20 blur-[80px]"></div>
+
+                  <div className="relative z-10 p-6 md:p-10 lg:p-12 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 lg:gap-10 items-center">
+                    <div>
+                      <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/15 text-blue-200 text-sm font-semibold mb-6 backdrop-blur-md">
+                        <Activity size={16} /> Welcome to MediSync AI
+                      </div>
+
+                      <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight mb-4">
+                        Manage your health confidently in one place
+                      </h1>
+
+                      <p className="max-w-2xl text-base md:text-lg text-indigo-100/85 mb-7 leading-relaxed">
+                        Track appointments, maintain your medical records, and keep your profile current with a secure,
+                        patient-first portal built for day-to-day healthcare needs.
+                      </p>
+
+                      <div className="grid sm:grid-cols-3 gap-3 mb-8">
+                        <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3">
+                          <p className="text-xs text-blue-200 uppercase tracking-wider font-semibold">Access</p>
+                          <p className="text-lg font-bold text-white mt-1">24/7</p>
+                        </div>
+                        <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3">
+                          <p className="text-xs text-blue-200 uppercase tracking-wider font-semibold">Security</p>
+                          <p className="text-lg font-bold text-white mt-1">Protected</p>
+                        </div>
+                        <div className="rounded-xl border border-white/15 bg-white/10 px-4 py-3">
+                          <p className="text-xs text-blue-200 uppercase tracking-wider font-semibold">Workflow</p>
+                          <p className="text-lg font-bold text-white mt-1">Simple</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 max-w-xl">
+                        <div className="rounded-xl border border-white/20 bg-white/10 p-3">
+                          <p className="text-xs uppercase tracking-wider text-blue-200 font-semibold">Appointments</p>
+                          <p className="mt-1 text-sm text-white">Plan and monitor upcoming visits</p>
+                        </div>
+                        <div className="rounded-xl border border-white/20 bg-white/10 p-3">
+                          <p className="text-xs uppercase tracking-wider text-blue-200 font-semibold">Medical Files</p>
+                          <p className="mt-1 text-sm text-white">Upload and manage records securely</p>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <h1 className="text-4xl md:text-5xl lg:text-7xl font-extrabold tracking-tight mb-6 text-transparent bg-clip-text bg-gradient-to-br from-white to-blue-200 drop-shadow-sm">
-                      Elevate Your Health Management
-                    </h1>
-                    
-                    <p className="max-w-2xl text-lg md:text-xl text-indigo-100/80 mb-10 leading-relaxed font-light">
-                      Experience a seamless, secure, and intelligent way to store your medical records, manage your profile, and track your wellness journey in one unified platform.
-                    </p>
-                    
-                    <div className="flex flex-wrap justify-center gap-4">
-                      <SignedIn>
+
+                    <div className="space-y-3">
+                      <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/5 shadow-xl">
+                        <img
+                          src="/home/hero.jpg"
+                          alt="Doctors consulting with a patient"
+                          className="w-full h-64 md:h-72 object-cover"
+                          width={1000}
+                          height={700}
+                          decoding="async"
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-3">
                         <Link to="/dashboard">
-                          <button className="flex items-center gap-2 px-8 py-4 rounded-full bg-white text-indigo-900 font-bold hover:bg-blue-50 hover:scale-105 transition-all shadow-[0_0_30px_rgba(255,255,255,0.2)]">
+                          <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-indigo-900 font-bold hover:bg-blue-50 transition-all shadow-[0_0_25px_rgba(255,255,255,0.22)]">
                             <Activity size={20} /> Go to Dashboard
                           </button>
                         </Link>
                         <Link to="/profile">
-                          <button className="flex items-center gap-2 px-8 py-4 rounded-full bg-white/5 text-white font-bold hover:bg-white/10 border border-white/10 hover:scale-105 transition-all backdrop-blur-sm">
+                          <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-white/10 text-white font-bold hover:bg-white/15 border border-white/20 transition-all backdrop-blur-sm">
                             <User size={20} /> Profile Settings
                           </button>
                         </Link>
-                      </SignedIn>
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
-                      <SignedOut>
-                        <Link to="/signup">
-                          <button className="px-8 py-4 rounded-full bg-blue-600 text-white font-bold hover:bg-blue-500 hover:scale-105 transition-all shadow-[0_0_30px_rgba(37,99,235,0.3)]">
-                            Get Started Instantly
-                          </button>
+                <section className="grid md:grid-cols-3 gap-6 md:gap-7">
+                  <div className="group bg-white rounded-3xl p-7 shadow-xl shadow-gray-200/40 border border-gray-100 hover:-translate-y-1.5 transition-all duration-300">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center mb-5 shadow-lg shadow-blue-200/50">
+                      <UploadCloud size={22} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">Secure Uploads</h3>
+                    <p className="text-gray-500 leading-relaxed text-sm">Add prescriptions, test reports, and imaging documents with secure storage support.</p>
+                  </div>
+
+                  <div className="group bg-white rounded-3xl p-7 shadow-xl shadow-gray-200/40 border border-gray-100 hover:-translate-y-1.5 transition-all duration-300">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center mb-5 shadow-lg shadow-indigo-200/50">
+                      <FileText size={22} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">Instant Access</h3>
+                    <p className="text-gray-500 leading-relaxed text-sm">Find your records and visit information from dashboard modules anytime you need them.</p>
+                  </div>
+
+                  <div className="group bg-white rounded-3xl p-7 shadow-xl shadow-gray-200/40 border border-gray-100 hover:-translate-y-1.5 transition-all duration-300">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center mb-5 shadow-lg shadow-emerald-200/50">
+                      <User size={22} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">Unified Profile</h3>
+                    <p className="text-gray-500 leading-relaxed text-sm">Keep contact details updated so care providers always work with accurate patient information.</p>
+                  </div>
+                </section>
+
+                <section className="grid lg:grid-cols-[1.05fr_0.95fr] gap-6 md:gap-8 items-stretch">
+                  <Card className="rounded-3xl border-slate-200/80 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">Care Workflow</p>
+                    <h2 className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">How to get the most from MediSync</h2>
+                    <div className="mt-6 space-y-4">
+                      <div className="flex gap-3">
+                        <span className="h-7 w-7 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">1</span>
+                        <p className="text-sm text-slate-600">Complete your profile details so appointments and follow-up care stay accurate.</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="h-7 w-7 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">2</span>
+                        <p className="text-sm text-slate-600">Visit doctors directory, choose specialty, and book a suitable appointment slot.</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="h-7 w-7 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">3</span>
+                        <p className="text-sm text-slate-600">Upload reports and manage history before or after consultations for continuity of care.</p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  <div className="rounded-3xl overflow-hidden border border-slate-200 bg-white shadow-sm flex flex-col">
+                    <img
+                      src="/home/patient.jpg"
+                      alt="Patient reviewing medical information"
+                      className="h-56 md:h-64 w-full object-cover"
+                      width={900}
+                      height={560}
+                      decoding="async"
+                    />
+                    <div className="p-6 flex-1">
+                      <h3 className="text-lg font-bold text-slate-900">Patient-first experience</h3>
+                      <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                        Designed to reduce confusion and save time with intuitive navigation, clear actions, and
+                        informative sections that match real healthcare needs.
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link to="/doctors" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+                          Find Doctors
                         </Link>
-                        <Link to="/signin">
-                          <button className="px-8 py-4 rounded-full bg-white/5 text-white font-bold hover:bg-white/10 border border-white/10 hover:scale-105 transition-all backdrop-blur-sm">
-                            Sign In to Account
-                          </button>
+                        <Link to="/appointments" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100">
+                          My Appointments
                         </Link>
-                      </SignedOut>
+                        <Link to="/profile" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+                          Profile
+                        </Link>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </section>
 
-                {/* Features Section */}
-                <div className="grid md:grid-cols-3 gap-6 md:gap-8">
-                  <div className="group bg-white rounded-3xl p-8 shadow-xl shadow-gray-200/40 border border-gray-100 hover:-translate-y-2 hover:shadow-2xl hover:shadow-blue-100/50 transition-all duration-300">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center mb-6 shadow-lg shadow-blue-200/50 group-hover:scale-110 transition-transform">
-                      <UploadCloud size={24} />
+                <footer className="rounded-3xl border border-slate-200 bg-slate-900 text-slate-300 px-6 md:px-8 py-8 md:py-10">
+                  <div className="grid md:grid-cols-3 gap-7">
+                    <div>
+                      <div className="inline-flex items-center gap-2 text-white font-bold text-lg tracking-tight">
+                        <Activity size={18} /> MediSync.ai
+                      </div>
+                      <p className="mt-3 text-sm text-slate-400 leading-relaxed">
+                        Connected care platform for appointments, health records, and secure profile management.
+                      </p>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-3 tracking-tight">Secure Uploads</h3>
-                    <p className="text-gray-500 leading-relaxed">Instantly upload and organize your medical prescriptions, lab reports, and imaging files with bank-grade security.</p>
-                  </div>
-
-                  <div className="group bg-white rounded-3xl p-8 shadow-xl shadow-gray-200/40 border border-gray-100 hover:-translate-y-2 hover:shadow-2xl hover:shadow-indigo-100/50 transition-all duration-300">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center mb-6 shadow-lg shadow-indigo-200/50 group-hover:scale-110 transition-transform">
-                      <FileText size={24} />
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Quick Links</h4>
+                      <div className="space-y-2 text-sm">
+                        <Link to="/dashboard" className="block hover:text-blue-300 transition-colors">Dashboard</Link>
+                        <Link to="/doctors" className="block hover:text-blue-300 transition-colors">Doctors Directory</Link>
+                        <Link to="/appointments" className="block hover:text-blue-300 transition-colors">Appointments</Link>
+                      </div>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-3 tracking-tight">Instant Access</h3>
-                    <p className="text-gray-500 leading-relaxed">Retrieve and review your historical medical data anytime, anywhere seamlessly straight from your dashboard.</p>
-                  </div>
-
-                  <div className="group bg-white rounded-3xl p-8 shadow-xl shadow-gray-200/40 border border-gray-100 hover:-translate-y-2 hover:shadow-2xl hover:shadow-emerald-100/50 transition-all duration-300">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center mb-6 shadow-lg shadow-emerald-200/50 group-hover:scale-110 transition-transform">
-                      <User size={24} />
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Support</h4>
+                      <div className="space-y-2 text-sm text-slate-300">
+                        <p className="flex items-center gap-2"><Smartphone size={16} className="text-blue-400" /> +94 11 555 0100</p>
+                        <p className="flex items-center gap-2"><MapPin size={16} className="text-blue-400" /> MediSync Health, Colombo</p>
+                        <p className="text-xs text-slate-500 pt-1">For emergency care, contact local emergency services immediately.</p>
+                      </div>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-3 tracking-tight">Unified Profile</h3>
-                    <p className="text-gray-500 leading-relaxed">Maintain a comprehensive health profile to ensure doctors and platforms always have your accurate details.</p>
                   </div>
-                </div>
+                </footer>
               </div>
             }
           />
