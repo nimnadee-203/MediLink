@@ -22,6 +22,7 @@ const Login = () => {
                 const { data } = await axios.post(backendUrl + '/api/admin/login', { email: normalizedEmail, password: normalizedPassword });
                 if (data.success) {
                     localStorage.setItem('aToken', data.token);
+                    localStorage.setItem('adminEmail', normalizedEmail);
                     localStorage.removeItem('dToken');
                     setAToken(data.token);
                     setDToken('');
@@ -34,7 +35,9 @@ const Login = () => {
                 const { data } = await axios.post(backendUrl + '/api/doctor/login', { email: normalizedEmail, password: normalizedPassword });
                 if (data.success) {
                     localStorage.setItem('dToken', data.token);
+                    localStorage.setItem('doctorEmail', normalizedEmail);
                     localStorage.removeItem('aToken');
+                    localStorage.removeItem('adminEmail');
                     setAToken('');
                     setDToken(data.token);
                     toast.success(data.message || "Logged in successfully!");
@@ -61,9 +64,9 @@ const Login = () => {
                 <form onSubmit={onSubmitHandler} className="login-form">
                     <div className="input-group">
                         <label>Email</label>
-                        <input 
-                            type="email" 
-                            required 
+                        <input
+                            type="email"
+                            required
                             placeholder="Enter your email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -72,9 +75,9 @@ const Login = () => {
 
                     <div className="input-group">
                         <label>Password</label>
-                        <input 
-                            type="password" 
-                            required 
+                        <input
+                            type="password"
+                            required
                             placeholder="Enter your password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}

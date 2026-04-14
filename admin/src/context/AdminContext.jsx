@@ -9,8 +9,11 @@ const AdminContextProvider = (props) => {
     const [dToken, setDToken] = useState(localStorage.getItem('dToken') ? localStorage.getItem('dToken') : '');
     const [dashData, setDashData] = useState(false);
     const [doctors, setDoctors] = useState([]);
+    const [appointments, setAppointments] = useState([]);
+    const [adminEmail, setAdminEmail] = useState(localStorage.getItem('adminEmail') || '');
     
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
+    const gatewayUrl = 'http://localhost:8000';
 
     const getDashData = async () => {
         try {
@@ -90,6 +93,42 @@ const AdminContextProvider = (props) => {
         }
     }
 
+    const getAllAppointments = async () => {
+        try {
+            const { data } = await axios.get(gatewayUrl + '/api/appointments', { headers: { atoken: aToken } });
+            if (data.appointments) {
+                setAppointments(data.appointments);
+                console.log(data.appointments);
+            } else {
+                toast.error(data.message || "Failed to fetch appointments");
+            }
+        } catch (error) {
+            toast.error(error.message);
+        }
+    }
+
+    const cancelAppointment = async (appointmentId) => {
+        try {
+            const { data } = await axios.patch(gatewayUrl + `/api/appointments/${appointmentId}/cancel`, {}, { headers: { atoken: aToken } });
+            if (data.appointment) {
+                toast.success("Appointment cancelled");
+                getAllAppointments();
+            } else {
+                toast.error(data.message || "Failed to cancel appointment");
+            }
+        } catch (error) {
+            toast.error(error.message);
+        }
+    }
+
+    const logout = () => {
+        setAToken('');
+        setAdminEmail('');
+        localStorage.removeItem('aToken');
+        localStorage.removeItem('adminEmail');
+        toast.info("Logged out successfully");
+    }
+
     const value = {
         aToken, setAToken,
         dToken, setDToken,
@@ -100,7 +139,12 @@ const AdminContextProvider = (props) => {
         getAllDoctors,
         changeAvailability,
         updateDoctor,
-        deleteDoctor
+        deleteDoctor,
+        appointments,
+        getAllAppointments,
+        cancelAppointment,
+        adminEmail,
+        logout
     };
 
     return (
