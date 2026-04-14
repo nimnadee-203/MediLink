@@ -1,0 +1,1032 @@
+/* ====================================================================
+   MEDILINK PAYMENT & NOTIFICATION STYLESHEET
+   Combined file including app.css and paymentpage.css styles
+   ==================================================================== */
+
+/* ====================================================================
+   GLOBAL STYLES & THEME
+   ==================================================================== */
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(41, 121, 255, 0.28), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(0, 229, 168, 0.16), transparent 28%),
+    linear-gradient(135deg, #08111f 0%, #0d1729 52%, #101c33 100%);
+  color: #e9f1ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+/* ====================================================================
+   LAYOUT CONTAINERS
+   ==================================================================== */
+
+.page-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.checkout-shell {
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 24px;
+}
+
+/* ====================================================================
+   CARD COMPONENTS
+   ==================================================================== */
+
+.hero-card,
+.form-card,
+.notice-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 15, 28, 0.72);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+  border-radius: 28px;
+}
+
+.hero-card {
+  padding: 40px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin: 0 0 16px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(80, 170, 255, 0.14);
+  color: #9ad0ff;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+.hero-card h1,
+.notice-card h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 4vw, 4.6rem);
+  line-height: 0.96;
+}
+
+.hero-copy {
+  max-width: 56ch;
+  color: rgba(233, 241, 255, 0.78);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  margin: 18px 0 0;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 32px;
+}
+
+.hero-metrics div {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hero-metrics span {
+  display: block;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(233, 241, 255, 0.62);
+}
+
+.hero-metrics strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.1rem;
+}
+
+.form-card,
+.notice-card {
+  padding: 28px;
+}
+
+.checkout-form {
+  display: grid;
+  gap: 18px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* ====================================================================
+   FORM ELEMENTS & INPUTS
+   ==================================================================== */
+
+label {
+  display: grid;
+  gap: 8px;
+  color: rgba(233, 241, 255, 0.88);
+  font-size: 0.95rem;
+}
+
+input,
+select,
+.card-box {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f9ff;
+  padding: 14px 16px;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(90, 177, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.card-box {
+  padding: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 0;
+  border-radius: 16px;
+  padding: 14px 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button:not(.secondary) {
+  background: linear-gradient(135deg, #6dd5ff 0%, #4f8cff 100%);
+  color: #04111d;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #edf4ff;
+}
+
+.message {
+  margin: 0;
+  min-height: 1.4em;
+  color: rgba(233, 241, 255, 0.76);
+}
+
+.message.success {
+  color: #78f0b7;
+}
+
+.message.error {
+  color: #ff9da9;
+}
+
+.notice-card code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ====================================================================
+   NAVIGATION & LINKS
+   ==================================================================== */
+
+.home-link {
+  display: inline-flex;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6dd5ff 0%, #4f8cff 100%);
+  color: #04111d;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.home-link:hover {
+  transform: translateY(-1px);
+}
+
+.back-link {
+  display: inline-flex;
+  margin-bottom: 20px;
+  color: #9ad0ff;
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: transform 0.18s ease;
+}
+
+.back-link:hover {
+  transform: translateX(-2px);
+}
+
+/* ====================================================================
+   SYMPTOM CHECKER PAGE STYLES
+   ==================================================================== */
+
+.symptom-checker-page .form-card {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.symptom-checker-page h1 {
+  margin: 20px 0 8px;
+  font-size: 2.8rem;
+}
+
+.subtitle {
+  color: rgba(233, 241, 255, 0.76);
+  margin-bottom: 24px;
+}
+
+.symptom-form {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: grid;
+  gap: 8px;
+}
+
+.form-group label {
+  color: rgba(233, 241, 255, 0.88);
+  font-weight: 600;
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: rgba(233, 241, 255, 0.62);
+  font-weight: 400;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f5f9ff;
+  padding: 12px 14px;
+  font-family: inherit;
+}
+
+.form-group textarea {
+  resize: vertical;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: 2px solid rgba(90, 177, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.checkbox-group {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  color: rgba(233, 241, 255, 0.88);
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.checkbox-group small {
+  display: block;
+  font-size: 0.8rem;
+  color: rgba(233, 241, 255, 0.62);
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.symptom-form button {
+  margin-top: 8px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #6dd5ff 0%, #4f8cff 100%);
+  color: #04111d;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.symptom-form button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.symptom-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  margin: 16px 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 157, 169, 0.12);
+  color: #ff9da9;
+  font-size: 0.95rem;
+}
+
+.disclaimer {
+  margin: 20px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(248, 154, 60, 0.12);
+  color: #f89a3c;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.no-match {
+  margin-top: 16px;
+  color: rgba(233, 241, 255, 0.76);
+  font-style: italic;
+}
+
+.results-section {
+  margin-top: 24px;
+}
+
+.analysis-results h2 {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+
+.result-card {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 14px;
+}
+
+.match-score {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.score-label {
+  color: rgba(233, 241, 255, 0.62);
+  font-size: 0.85rem;
+}
+
+.score-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #78f0b7;
+}
+
+.result-content h3 {
+  margin: 12px 0 8px;
+  font-size: 1rem;
+  color: #edf4ff;
+}
+
+.conditions-list,
+.doctors-list {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.conditions-list li,
+.doctors-list li {
+  padding: 6px 0;
+  color: rgba(233, 241, 255, 0.76);
+}
+
+.conditions-list li:before {
+  content: "🏥 ";
+  margin-right: 8px;
+}
+
+.doctors-list li:before {
+  content: "👨‍⚕️ ";
+  margin-right: 8px;
+}
+
+/* ====================================================================
+   PAYMENT PAGE STYLES - MODERN & LIGHT THEME
+   ==================================================================== */
+
+.payment-page-shell {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e8ecf1 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Main Wrapper */
+.payment-wrapper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  max-width: 1100px;
+  width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 968px) {
+  .payment-wrapper {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+/* Payment Form Box */
+.payment-form-box,
+.payment-summary-box {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f0f2f5;
+}
+
+.payment-header {
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+.payment-header h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #1a1d29;
+  font-weight: 600;
+}
+
+/* Payment Form */
+.payment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Payment Methods */
+.payment-methods-group {
+  margin-bottom: 8px;
+}
+
+.group-label {
+  display: block;
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.payment-methods-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.payment-btn {
+  padding: 12px 10px;
+  border: 2px solid #e0e3e8;
+  background: white;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #1a1d29;
+}
+
+.payment-btn:hover {
+  border-color: #2563eb;
+  background: #f0f7ff;
+}
+
+.payment-btn.active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: white;
+}
+
+@media (max-width: 600px) {
+  .payment-methods-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Form Fields */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 0.9rem;
+  color: #1a1d29;
+  font-weight: 600;
+  margin: 0;
+}
+
+.form-field input,
+.form-field select,
+.select-field {
+  padding: 10px 12px;
+  border: 1px solid #e0e3e8;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  color: #1a1d29;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.select-field:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  background: #f8faff;
+}
+
+.form-field input::placeholder {
+  color: #aeb5c0;
+}
+
+.select-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%231a1d29' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+/* Form Row */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* Card Element */
+.card-element-box {
+  padding: 12px;
+  border: 1px solid #e0e3e8;
+  border-radius: 6px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.card-element-box:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+/* Stripe Card Element Styles */
+.StripeElement {
+  padding: 0 !important;
+}
+
+.StripeElement--focus {
+  outline: none;
+}
+
+/* Disable autofill suggestions */
+.card-element-box input:-webkit-autofill,
+.card-element-box input:-webkit-autofill:hover,
+.card-element-box input:-webkit-autofill:focus,
+.card-element-box input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px white inset !important;
+  box-shadow: 0 0 0 30px white inset !important;
+}
+
+.card-element-box input:-webkit-autofill {
+  -webkit-text-fill-color: #1a1d29 !important;
+}
+
+/* Buttons */
+.btn-pay-now,
+.btn-back,
+.btn-cancel {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-pay-now {
+  width: 100%;
+  background: #2563eb;
+  color: white;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+}
+
+.btn-pay-now:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-pay-now:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.btn-back,
+.btn-cancel {
+  background: white;
+  color: #1a1d29;
+  border: 1.5px solid #e0e3e8;
+}
+
+.btn-back:hover,
+.btn-cancel:hover {
+  border-color: #2563eb;
+  background: #f0f7ff;
+  color: #2563eb;
+}
+
+/* Message */
+.payment-message {
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border-left: 3px solid #e0e3e8;
+  background: #f5f7fa;
+  color: #666;
+  margin-top: 12px;
+}
+
+.payment-message.success {
+  background: #ecfdf5;
+  color: #10b981;
+  border-left-color: #10b981;
+}
+
+.payment-message.error {
+  background: #fef2f2;
+  color: #ef4444;
+  border-left-color: #ef4444;
+}
+
+.payment-message.processing {
+  background: #fffbeb;
+  color: #d97706;
+  border-left-color: #d97706;
+}
+
+/* Payment Summary Box */
+.summary-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+.summary-header h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #1a1d29;
+  font-weight: 600;
+}
+
+.summary-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 0.9rem;
+}
+
+.summary-row:last-of-type {
+  border-bottom: none;
+}
+
+.summary-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.summary-value {
+  color: #1a1d29;
+  font-weight: 600;
+  text-align: right;
+}
+
+.summary-divider {
+  height: 1px;
+  background: #e8ecf1;
+  margin: 12px 0;
+}
+
+.total-row {
+  padding: 16px 0;
+  border-top: 2px solid #e0e3e8;
+  border-bottom: 2px solid #e0e3e8;
+  font-size: 1.05rem;
+  margin: 12px 0;
+}
+
+.summary-total {
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+/* Security Notice */
+.security-notice {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 20px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+}
+
+.security-check {
+  font-size: 1.2rem;
+  color: #10b981;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.security-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.security-info strong {
+  font-size: 0.9rem;
+  color: #047857;
+  margin: 0;
+}
+
+.security-info p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #10b981;
+  line-height: 1.4;
+}
+
+/* ====================================================================
+   SUCCESS PAGE STYLES
+   ==================================================================== */
+
+.success-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.success-card {
+  background: white;
+  border-radius: 12px;
+  padding: 48px 32px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid #f0f2f5;
+  max-width: 500px;
+  text-align: center;
+}
+
+.success-icon {
+  font-size: 4rem;
+  color: #10b981;
+  margin-bottom: 20px;
+  animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.success-card h1 {
+  margin: 0 0 16px 0;
+  font-size: 1.8rem;
+  color: #1a1d29;
+  font-weight: 700;
+}
+
+.success-message {
+  margin: 24px 0;
+  padding: 16px;
+  background: #ecfdf5;
+  border-radius: 8px;
+  border: 1px solid #a7f3d0;
+}
+
+.success-message p {
+  margin: 8px 0;
+  color: #047857;
+  font-size: 0.95rem;
+}
+
+.success-message p:first-child {
+  margin-top: 0;
+}
+
+.success-message p:last-child {
+  margin-bottom: 0;
+}
+
+/* Payment Details */
+.payment-details {
+  margin: 28px 0;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #e8ecf1;
+  font-size: 0.9rem;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  color: #666;
+  font-weight: 500;
+}
+
+.detail-value {
+  color: #1a1d29;
+  font-weight: 600;
+}
+
+.btn-back-home {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 16px;
+}
+
+.btn-back-home:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* ====================================================================
+   RESPONSIVE DESIGN
+   ==================================================================== */
+
+@media (max-width: 920px) {
+  .checkout-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-metrics,
+  .two-up {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .payment-page-shell {
+    padding: 20px 16px;
+  }
+
+  .payment-form-box,
+  .payment-summary-box {
+    padding: 24px;
+  }
+
+  .form-row,
+  .button-group {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-methods-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .success-card {
+    padding: 32px 20px;
+  }
+
+  .success-icon {
+    font-size: 3rem;
+  }
+
+  .success-card h1 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .payment-methods-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .success-card {
+    padding: 32px 20px;
+  }
+
+  .success-icon {
+    font-size: 3rem;
+  }
+
+  .success-card h1 {
+    font-size: 1.5rem;
+  }
+}
