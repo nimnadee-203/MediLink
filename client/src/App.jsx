@@ -30,6 +30,8 @@ import DoctorsList from './pages/DoctorsList';
 import BookAppointment from './pages/BookAppointment';
 import MyAppointments from './pages/MyAppointments';
 import TelemedicineSession from './pages/TelemedicineSession';
+import PaymentPage from './pages/PaymentPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -213,6 +215,7 @@ function AppContent() {
 
   const request = async (path, options = {}) => {
     let lastFailure = null;
+    const timeoutMs = 8000;
 
     for (const baseUrl of API_BASE_URL_CANDIDATES) {
       try {
@@ -225,10 +228,17 @@ function AppContent() {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         };
 
-        const response = await fetch(`${baseUrl}${path}`, {
-          ...options,
-          headers
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const response = await fetch(
+          `${baseUrl}${path}`,
+          {
+            ...options,
+            headers,
+            signal: controller.signal
+          }
+        ).finally(() => clearTimeout(timeoutId));
         const data = await response.json().catch(() => ({}));
 
         if (response.ok) return data;
@@ -241,8 +251,11 @@ function AppContent() {
 
         throw new Error(data.message || `Request failed (${response.status})`);
       } catch (error) {
-        lastFailure = error;
-        const isNetworkError = error?.name === 'TypeError';
+        lastFailure =
+          error?.name === 'AbortError'
+            ? new Error(`Request timed out after ${timeoutMs / 1000}s at ${baseUrl}.`)
+            : error;
+        const isNetworkError = error?.name === 'TypeError' || error?.name === 'AbortError';
         if (!isNetworkError) throw error;
       }
     }
@@ -1830,6 +1843,36 @@ function AppContent() {
               isSignedIn ? (
                 effectiveRole === 'patient' ? (
                   <TelemedicineSession />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/payment"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <PaymentPage />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/payment-success"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <PaymentSuccessPage />
                 ) : (
                   <Navigate to="/dashboard" replace />
                 )

@@ -201,8 +201,20 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
         saveAppointmentVisitMode(createdAppointmentId, visitMode);
       }
 
-      setMessage({ type: 'success', text: 'Your appointment is confirmed. Redirecting to your visits…' });
-      setTimeout(() => navigate('/appointments'), 1600);
+      setMessage({ type: 'success', text: 'Your appointment is confirmed. Redirecting to payment…' });
+      setTimeout(
+        () =>
+          navigate('/payment', {
+            state: {
+              appointmentId: createdAppointmentId || '',
+              patientId: patientRecordId,
+              doctorId: doctor._id,
+              amount: doctor.fees,
+              appointmentDate: formatDate(selectedDate)
+            }
+          }),
+        800
+      );
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to book appointment' });
     } finally {
