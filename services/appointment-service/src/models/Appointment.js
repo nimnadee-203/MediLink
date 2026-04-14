@@ -27,6 +27,17 @@ const appointmentSchema = new mongoose.Schema({
     trim: true,
     default: ""
   },
+  visitMode: {
+    type: String,
+    enum: ["in_person", "telemedicine"],
+    default: "in_person"
+  },
+
+  /** Patient report subdocument ids (from patient profile) shared for this visit */
+  reportIds: {
+    type: [mongoose.Schema.Types.ObjectId],
+    default: []
+  },
 
   status: {
     type: String,
@@ -61,5 +72,6 @@ appointmentSchema.index(
 appointmentSchema.index({ patientId: 1, createdAt: -1 });
 appointmentSchema.index({ doctorId: 1, createdAt: -1 });
 appointmentSchema.index({ status: 1, slotDate: 1 });
+appointmentSchema.index({ doctorId: 1, visitMode: 1, slotDate: 1 });
 
 export default mongoose.model("Appointment", appointmentSchema);

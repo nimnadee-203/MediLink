@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, MapPin, Clock, Star, Stethoscope, Video } from 'lucide-react';
 import { cn, Card, Button } from '../components/ui';
-import { mockDoctors, SPECIALITIES, CONSULTATION_MODE_LABELS } from '../data/mockDoctors';
+import { CONSULTATION_MODE_LABELS, fetchDoctors, formatDoctorDisplayName } from '../lib/doctors';
 
 export default function DoctorsList() {
   const [searchParams] = useSearchParams();
+  const [doctors, setDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedSpeciality, setSelectedSpeciality] = useState('');
   const [recommendedSpecialities, setRecommendedSpecialities] = useState([]);
   const [selectedConsultationMode, setSelectedConsultationMode] = useState('');
@@ -23,7 +26,38 @@ export default function DoctorsList() {
     setSelectedConsultationMode(searchParams.get('consultationMode') ?? '');
   }, [searchParams]);
 
-  const filteredDoctors = mockDoctors.filter((doc) => {
+  useEffect(() => {
+    let active = true;
+
+    const loadDoctors = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const list = await fetchDoctors();
+        if (active) {
+          setDoctors(list);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err.message || 'Failed to load doctors');
+          setDoctors([]);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadDoctors();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const specialities = [...new Set(doctors.map((doc) => doc.speciality).filter(Boolean))].sort();
+
+  const filteredDoctors = doctors.filter((doc) => {
     if (!doc.available) return false;
     if (selectedSpeciality && doc.speciality !== selectedSpeciality) return false;
     if (!selectedSpeciality && recommendedSpecialities.length > 0 && !recommendedSpecialities.includes(doc.speciality)) return false;
@@ -72,7 +106,7 @@ export default function DoctorsList() {
           className="rounded-xl border border-gray-200 bg-white py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none shadow-sm min-w-[200px]"
         >
           <option value="">All Specialities</option>
-          {SPECIALITIES.map((s) => (
+          {specialities.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
@@ -88,24 +122,39 @@ export default function DoctorsList() {
         </select>
       </div>
 
-      {filteredDoctors.length === 0 ? (
+      {loading && (
+        <Card className="text-center py-16">
+          <p className="text-gray-500 text-lg font-medium">Loading doctors...</p>
+        </Card>
+      )}
+
+      {!loading && error && (
+        <Card className="text-center py-16">
+          <Stethoscope className="mx-auto text-red-300 mb-4" size={56} />
+          <p className="text-red-500 text-lg font-medium">{error}</p>
+        </Card>
+      )}
+
+      {!loading && !error && filteredDoctors.length === 0 ? (
         <Card className="text-center py-16">
           <Stethoscope className="mx-auto text-gray-300 mb-4" size={56} />
           <p className="text-gray-500 text-lg font-medium">No doctors found matching your criteria.</p>
           <p className="text-gray-400 mt-1">Try adjusting your filters.</p>
         </Card>
-      ) : (
+      ) : !loading && !error ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredDoctors.map((doctor) => (
-            <Card key={doctor._id} className="p-0 overflow-hidden hover:shadow-2xl transition-shadow duration-300">
+          {filteredDoctors.map((doctor) => {
+            const displayDoctorName = formatDoctorDisplayName(doctor.name);
+            return (
+              <Card key={doctor._id} className="p-0 overflow-hidden hover:shadow-2xl transition-shadow duration-300">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 flex items-center gap-4">
                 <img
                   src={doctor.image}
-                  alt={doctor.name}
+                  alt={displayDoctorName}
                   className="w-16 h-16 rounded-full border-2 border-white/30 object-cover"
                 />
                 <div className="min-w-0">
-                  <h3 className="text-white font-bold text-lg truncate">{doctor.name}</h3>
+                  <h3 className="text-white font-bold text-lg truncate">{displayDoctorName}</h3>
                   <p className="text-blue-100 text-sm">{doctor.speciality}</p>
                 </div>
               </div>
@@ -144,9 +193,10 @@ export default function DoctorsList() {
                 </Link>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

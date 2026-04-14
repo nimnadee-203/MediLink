@@ -1,4 +1,8 @@
 import { verifyToken } from '@clerk/backend';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const getClerkSecretKey = () => {
   const secretKey = process.env.CLERK_SECRET_KEY;
@@ -57,7 +61,23 @@ const verifyClerkToken = async (token) => {
 
 const authenticateJwt = async (req, res, next) => {
   try {
+    const { atoken } = req.headers;
     const authHeader = req.headers.authorization;
+
+    // First check for Admin atoken
+    if (atoken) {
+      try {
+        const decoded = jwt.verify(atoken, process.env.JWT_SECRET || 'shanuka');
+        // Simple validation as seen in doctor-service
+        if (decoded) {
+          req.user = { id: 'admin', role: 'admin', authType: 'admin' };
+          return next();
+        }
+      } catch (err) {
+        console.log("Admin token verification failed, trying Clerk...");
+      }
+    }
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'Authorization token is required' });
     }

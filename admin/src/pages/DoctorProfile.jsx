@@ -22,6 +22,7 @@ const DoctorProfile = () => {
     const [address, setAddress] = useState('');
     const [about, setAbout] = useState('');
     const [available, setAvailable] = useState(true);
+    const [consultationMode, setConsultationMode] = useState('in_person_only');
 
     const fetchDocInfo = () => {
         const doc = doctors.find(d => d._id === docId);
@@ -35,6 +36,7 @@ const DoctorProfile = () => {
             setAddress(doc.address);
             setAbout(doc.about);
             setAvailable(doc.available);
+            setConsultationMode(doc.consultationMode || 'in_person_only');
         }
     };
 
@@ -60,6 +62,7 @@ const DoctorProfile = () => {
         formData.append('about', about);
         formData.append('available', available);
         formData.append('status', docData?.status || 'approved');
+        formData.append('consultationMode', consultationMode);
 
         if (tempImg) {
             formData.append('image', tempImg);
@@ -172,6 +175,14 @@ const DoctorProfile = () => {
                             value={address} 
                             onChange={(e) => setAddress(e.target.value)} 
                         />
+                    </div>
+
+                    <div className="profile-item">
+                        <label>Consultation Mode</label>
+                        <select value={consultationMode} onChange={(e) => setConsultationMode(e.target.value)}>
+                            <option value="in_person_only">In-person only</option>
+                            <option value="both">In-person + Telemedicine</option>
+                        </select>
                     </div>
 
                     <div className="profile-item profile-about">

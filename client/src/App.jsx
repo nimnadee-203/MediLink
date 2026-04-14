@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Link,
   Navigate,
@@ -21,7 +21,10 @@ import {
   Smartphone,
   MapPin,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  RefreshCw,
+  Video
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -33,6 +36,7 @@ import TelemedicineSession from './pages/TelemedicineSession';
 import PaymentPage from './pages/PaymentPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import SymptomCheckerPage from './pages/SymptomCheckerPage';
+import { appointmentRequest } from './lib/api';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -88,6 +92,28 @@ const ROLE_PRIVILEGES = {
 };
 
 const normalizeRole = (role) => (['patient', 'doctor', 'admin'].includes(role) ? role : 'patient');
+
+const formatTime12h = (time24 = '') => {
+  const [h, m] = String(time24).split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return time24 || 'N/A';
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+};
+
+const getAppointmentTimestamp = (appointment) =>
+  new Date(`${appointment.slotDate || ''}T${appointment.slotTime || '00:00'}:00`).getTime();
+
+const formatAppointmentDate = (dateStr) => {
+  if (!dateStr) return 'Unknown date';
+  const date = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateStr;
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+};
 
 const getReportPreviewUrl = (report) => {
   if (!report) return null;
@@ -185,6 +211,9 @@ function AppContent() {
   const [adminEditForm, setAdminEditForm] = useState({ name: '', email: '', role: 'patient', phone: '' });
   const [editingReportId, setEditingReportId] = useState(null);
   const [editingReportForm, setEditingReportForm] = useState({ title: '', description: '' });
+  const [doctorAppointments, setDoctorAppointments] = useState([]);
+  const [doctorAppointmentsLoading, setDoctorAppointmentsLoading] = useState(false);
+  const [doctorAppointmentsError, setDoctorAppointmentsError] = useState('');
 
   const patientEmail = patient?.email || '';
   const visibleEmail =
@@ -199,6 +228,7 @@ function AppContent() {
     patient?.name && patient.name !== 'Clerk User'
       ? patient.name
       : clerkDisplayName || patient?.name || 'Patient';
+  const doctorRecordId = patient?.id ?? patient?._id ?? null;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -362,6 +392,67 @@ function AppContent() {
     setDoctorSection('overview');
     setPatientSection('overview');
   }, [effectiveRole]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadDoctorAppointments = async () => {
+      if (!isSignedIn || effectiveRole !== 'doctor' || !doctorRecordId || location.pathname !== '/dashboard') {
+        if (active) {
+          setDoctorAppointments([]);
+          setDoctorAppointmentsError('');
+          setDoctorAppointmentsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        setDoctorAppointmentsLoading(true);
+        setDoctorAppointmentsError('');
+        const data = await appointmentRequest(`?doctorId=${encodeURIComponent(String(doctorRecordId))}`, getToken);
+        if (active) {
+          setDoctorAppointments(Array.isArray(data?.appointments) ? data.appointments : []);
+        }
+      } catch (error) {
+        if (active) {
+          setDoctorAppointments([]);
+          setDoctorAppointmentsError(error?.message || 'Failed to load doctor appointments');
+        }
+      } finally {
+        if (active) {
+          setDoctorAppointmentsLoading(false);
+        }
+      }
+    };
+
+    loadDoctorAppointments();
+    return () => {
+      active = false;
+    };
+  }, [isSignedIn, effectiveRole, doctorRecordId, location.pathname, getToken]);
+
+  const doctorDashboardStats = useMemo(() => {
+    const now = Date.now();
+    const today = new Date().toISOString().split('T')[0];
+
+    const todayAppointments = doctorAppointments.filter(
+      (appointment) => appointment.slotDate === today && appointment.status !== 'cancelled'
+    );
+    const pendingCount = doctorAppointments.filter((appointment) => appointment.status === 'pending').length;
+    const completedToday = doctorAppointments.filter(
+      (appointment) => appointment.slotDate === today && appointment.status === 'completed'
+    ).length;
+    const upcoming = doctorAppointments
+      .filter((appointment) => ['pending', 'confirmed'].includes(appointment.status) && getAppointmentTimestamp(appointment) >= now)
+      .sort((a, b) => getAppointmentTimestamp(a) - getAppointmentTimestamp(b));
+
+    return {
+      todayCount: todayAppointments.length,
+      pendingCount,
+      completedToday,
+      upcoming
+    };
+  }, [doctorAppointments]);
 
   const onSaveProfile = async (e) => {
     e.preventDefault();
@@ -631,10 +722,20 @@ function AppContent() {
             element={
               <div className="space-y-10 md:space-y-12 pb-6">
                 <section className="relative overflow-hidden rounded-[2.3rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white shadow-2xl border border-white/10">
+                  <img
+                    src="/home/hero.jpg"
+                    alt="Doctors consulting with a patient"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    width={1400}
+                    height={900}
+                    decoding="async"
+                  />
+                  <div className="absolute inset-0 bg-slate-950/50" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-indigo-950/70 to-blue-950/55" />
                   <div className="absolute top-0 right-0 -mr-20 -mt-20 w-72 h-72 rounded-full bg-blue-500/20 blur-[80px]"></div>
                   <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-indigo-500/20 blur-[80px]"></div>
 
-                  <div className="relative z-10 p-6 md:p-10 lg:p-12 grid lg:grid-cols-[1.05fr_0.95fr] gap-8 lg:gap-10 items-center">
+                  <div className="relative z-10 p-6 md:p-10 lg:p-12 max-w-3xl">
                     <div>
                       <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/15 text-blue-200 text-sm font-semibold mb-6 backdrop-blur-md">
                         <Activity size={16} /> Welcome to MediSync AI
@@ -675,30 +776,22 @@ function AppContent() {
                         </div>
                       </div>
                     </div>
-
-                    <div className="space-y-3">
-                      <div className="overflow-hidden rounded-2xl border border-white/20 bg-white/5 shadow-xl">
-                        <img
-                          src="/home/hero.jpg"
-                          alt="Doctors consulting with a patient"
-                          className="w-full h-64 md:h-72 object-cover"
-                          width={1000}
-                          height={700}
-                          decoding="async"
-                        />
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        <Link to="/dashboard">
-                          <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-indigo-900 font-bold hover:bg-blue-50 transition-all shadow-[0_0_25px_rgba(255,255,255,0.22)]">
-                            <Activity size={20} /> Go to Dashboard
-                          </button>
-                        </Link>
-                        <Link to="/profile">
-                          <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-white/10 text-white font-bold hover:bg-white/15 border border-white/20 transition-all backdrop-blur-sm">
-                            <User size={20} /> Profile Settings
-                          </button>
-                        </Link>
-                      </div>
+                    <div className="mt-7 flex flex-wrap gap-3">
+                      <Link to="/doctors">
+                        <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-emerald-500 text-white font-bold hover:bg-emerald-600 transition-all shadow-[0_10px_30px_rgba(16,185,129,0.3)]">
+                          <Stethoscope size={20} /> Browse Doctors
+                        </button>
+                      </Link>
+                      <Link to="/dashboard">
+                        <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-white text-indigo-900 font-bold hover:bg-blue-50 transition-all shadow-[0_0_25px_rgba(255,255,255,0.22)]">
+                          <Activity size={20} /> Go to Dashboard
+                        </button>
+                      </Link>
+                      <Link to="/profile">
+                        <button className="flex items-center gap-2 px-7 py-3.5 rounded-full bg-white/10 text-white font-bold hover:bg-white/15 border border-white/20 transition-all backdrop-blur-sm">
+                          <User size={20} /> Profile Settings
+                        </button>
+                      </Link>
                     </div>
                   </div>
                 </section>
@@ -1274,7 +1367,7 @@ function AppContent() {
                                 <p className="font-medium text-slate-500">Today Appointments</p>
                                 <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform"><Calendar size={20} /></div>
                               </div>
-                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">12</p>
+                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">{doctorDashboardStats.todayCount}</p>
                             </Card>
                             <Card className="p-6 relative overflow-hidden group">
                               <div className="h-1 bg-amber-500 absolute top-0 left-0 w-full opacity-50"></div>
@@ -1282,7 +1375,7 @@ function AppContent() {
                                 <p className="font-medium text-slate-500">Pending Consults</p>
                                 <div className="p-2 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform"><Activity size={20} /></div>
                               </div>
-                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">5</p>
+                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">{doctorDashboardStats.pendingCount}</p>
                             </Card>
                             <Card className="p-6 relative overflow-hidden group">
                               <div className="h-1 bg-emerald-500 absolute top-0 left-0 w-full opacity-50"></div>
@@ -1290,20 +1383,68 @@ function AppContent() {
                                 <p className="font-medium text-slate-500">Completed Today</p>
                                 <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform"><Shield size={20} /></div>
                               </div>
-                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">7</p>
+                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">{doctorDashboardStats.completedToday}</p>
                             </Card>
                           </div>
 
                           <Card className="border-t-4 border-t-slate-200">
-                            <h3 className="text-lg font-bold text-slate-800 mb-4 px-1">Upcoming Appointments</h3>
-                            <ul className="flex flex-col gap-3">
-                              {['10:00 AM - Follow-up consultation', '11:30 AM - New patient review', '02:00 PM - Telemedicine check-in'].map((apt, i) => (
-                                <li key={i} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
-                                  <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-                                  <span className="font-medium text-slate-700">{apt}</span>
-                                </li>
-                              ))}
-                            </ul>
+                            <div className="flex items-center justify-between gap-3 mb-4 px-1">
+                              <h3 className="text-lg font-bold text-slate-800">Upcoming Appointments</h3>
+                              <button
+                                type="button"
+                                onClick={() => setDoctorSection('consultations')}
+                                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1"
+                              >
+                                Open consultations
+                              </button>
+                            </div>
+                            {doctorAppointmentsLoading ? (
+                              <div className="text-sm text-slate-500 px-1 inline-flex items-center gap-2">
+                                <RefreshCw size={14} className="animate-spin" />
+                                Loading upcoming appointments...
+                              </div>
+                            ) : doctorAppointmentsError ? (
+                              <div className="rounded-xl border border-red-100 bg-red-50 text-red-700 text-sm px-4 py-3">
+                                {doctorAppointmentsError}
+                              </div>
+                            ) : doctorDashboardStats.upcoming.length === 0 ? (
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-sm px-4 py-3">
+                                No upcoming appointments yet.
+                              </div>
+                            ) : (
+                              <ul className="flex flex-col gap-3">
+                                {doctorDashboardStats.upcoming.slice(0, 8).map((appointment) => (
+                                  <li
+                                    key={appointment.id}
+                                    className="flex items-center justify-between gap-4 p-4 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-4 min-w-0">
+                                      <div className={cn(
+                                        'w-2.5 h-2.5 rounded-full shrink-0',
+                                        appointment.status === 'confirmed' ? 'bg-blue-500' : 'bg-amber-500'
+                                      )}></div>
+                                      <div className="min-w-0">
+                                        <p className="font-medium text-slate-800 truncate">
+                                          {formatTime12h(appointment.slotTime)} · {formatAppointmentDate(appointment.slotDate)}
+                                        </p>
+                                        <p className="text-sm text-slate-500 truncate">
+                                          {appointment.reason || 'Consultation scheduled'} · {String(appointment.status || 'pending')}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="text-xs text-slate-500">Patient #{String(appointment.patientId || '').slice(-6)}</span>
+                                      {appointment.visitMode === 'telemedicine' && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 border border-sky-100 text-sky-700 text-xs px-2 py-1">
+                                          <Video size={12} />
+                                          Video
+                                        </span>
+                                      )}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </Card>
                         </>
                       )}

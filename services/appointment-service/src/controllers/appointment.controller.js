@@ -1,9 +1,11 @@
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
+import axios from "axios";
 
 const editableStatuses = new Set(["pending", "confirmed"]);
 const validStatuses = new Set(["pending", "confirmed", "cancelled", "completed"]);
 const validPaymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
+const validVisitModes = new Set(["in_person", "telemedicine"]);
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
@@ -16,6 +18,8 @@ const sanitizeAppointment = (appointment) => ({
   amount: appointment.amount,
   reason: appointment.reason,
   notes: appointment.notes,
+  visitMode: appointment.visitMode,
+  reportIds: (appointment.reportIds || []).map((id) => String(id)),
   status: appointment.status,
   paymentStatus: appointment.paymentStatus,
   cancelledAt: appointment.cancelledAt,
@@ -33,6 +37,8 @@ const parseBookingPayload = (body) => {
     amount,
     reason,
     notes,
+    visitMode,
+    reportIds,
     status,
     paymentStatus
   } = body;
@@ -45,6 +51,8 @@ const parseBookingPayload = (body) => {
     amount,
     reason,
     notes,
+    visitMode,
+    reportIds,
     status,
     paymentStatus
   };
@@ -76,6 +84,23 @@ const ensureBookingPayload = (payload) => {
 
   if (payload.paymentStatus && !validPaymentStatuses.has(payload.paymentStatus)) {
     return "paymentStatus is invalid";
+  }
+
+  if (payload.visitMode && !validVisitModes.has(payload.visitMode)) {
+    return "visitMode is invalid";
+  }
+
+  const reportIds = Array.isArray(payload.reportIds) ? payload.reportIds : [];
+  if (payload.reportIds !== undefined && payload.reportIds !== null && !Array.isArray(payload.reportIds)) {
+    return "reportIds must be an array";
+  }
+  if (reportIds.length > 50) {
+    return "Too many reports selected";
+  }
+  for (const id of reportIds) {
+    if (!isValidObjectId(String(id))) {
+      return "Each report id must be a valid MongoDB ObjectId";
+    }
   }
 
   return null;
@@ -123,10 +148,14 @@ export const createAppointment = async (req, res) => {
       return res.status(409).json({ message: conflictMessage });
     }
 
+    const reportIds = Array.isArray(payload.reportIds) ? payload.reportIds : [];
+
     const appointment = await Appointment.create({
       ...payload,
       reason: payload.reason || "",
-      notes: payload.notes || ""
+      notes: payload.notes || "",
+      visitMode: payload.visitMode === "telemedicine" ? "telemedicine" : "in_person",
+      reportIds
     });
 
     return res.status(201).json({
@@ -159,6 +188,7 @@ export const getAppointmentById = async (req, res) => {
 export const listAppointments = async (req, res) => {
   try {
     const { patientId, doctorId, status, paymentStatus, slotDate } = req.query;
+    const { atoken } = req.headers;
     const query = {};
 
     if (patientId) {
@@ -195,9 +225,44 @@ export const listAppointments = async (req, res) => {
 
     const appointments = await Appointment.find(query).sort({ slotDate: 1, slotTime: 1, createdAt: -1 });
 
+    // Enrich with names if it's an admin request
+    let enrichedAppointments = appointments.map(sanitizeAppointment);
+
+    if (req.user?.role === 'admin' && atoken) {
+      try {
+        // Fetch doctors and patients in parallel
+        const [doctorsRes, patientsRes] = await Promise.all([
+          axios.post('http://localhost:4000/api/admin/all-doctors', {}, { headers: { atoken } }).catch(() => ({ data: { success: false } })),
+          axios.get('http://localhost:8002/api/patients/admin/users', { headers: { atoken } }).catch(() => ({ data: { success: false } }))
+        ]);
+
+        const doctorsMap = {};
+        if (doctorsRes.data?.success) {
+          doctorsRes.data.doctors.forEach(doc => {
+            doctorsMap[doc._id] = doc.name;
+          });
+        }
+
+        const patientsMap = {};
+        if (patientsRes.data?.users) {
+          patientsRes.data.users.forEach(pat => {
+            patientsMap[pat.id || pat._id] = pat.name;
+          });
+        }
+
+        enrichedAppointments = enrichedAppointments.map(app => ({
+          ...app,
+          patientName: patientsMap[app.patientId] || "Unknown Patient",
+          doctorName: doctorsMap[app.doctorId] || "Unknown Doctor"
+        }));
+      } catch (err) {
+        console.error("Enrichment failed:", err.message);
+      }
+    }
+
     return res.json({
       count: appointments.length,
-      appointments: appointments.map(sanitizeAppointment)
+      appointments: enrichedAppointments
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to list appointments", error: error.message });
@@ -222,7 +287,17 @@ export const updateAppointment = async (req, res) => {
       });
     }
 
-    const allowedUpdates = ["slotDate", "slotTime", "amount", "reason", "notes", "status", "paymentStatus"];
+    const allowedUpdates = [
+      "slotDate",
+      "slotTime",
+      "amount",
+      "reason",
+      "notes",
+      "visitMode",
+      "reportIds",
+      "status",
+      "paymentStatus"
+    ];
     const updates = {};
 
     for (const field of allowedUpdates) {
@@ -245,6 +320,24 @@ export const updateAppointment = async (req, res) => {
 
     if (updates.paymentStatus !== undefined && !validPaymentStatuses.has(updates.paymentStatus)) {
       return res.status(400).json({ message: "paymentStatus is invalid" });
+    }
+
+    if (updates.visitMode !== undefined && !validVisitModes.has(updates.visitMode)) {
+      return res.status(400).json({ message: "visitMode is invalid" });
+    }
+
+    if (updates.reportIds !== undefined) {
+      if (!Array.isArray(updates.reportIds)) {
+        return res.status(400).json({ message: "reportIds must be an array" });
+      }
+      if (updates.reportIds.length > 50) {
+        return res.status(400).json({ message: "Too many reports selected" });
+      }
+      for (const id of updates.reportIds) {
+        if (!isValidObjectId(String(id))) {
+          return res.status(400).json({ message: "Each report id must be a valid MongoDB ObjectId" });
+        }
+      }
     }
 
     const nextSlotDate = updates.slotDate || appointment.slotDate;
@@ -280,6 +373,67 @@ export const updateAppointment = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to update appointment", error: error.message });
+  }
+};
+
+export const updatePatientAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid appointment id" });
+    }
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (req.body.patientId === undefined || req.body.patientId === null || req.body.patientId === "") {
+      return res.status(400).json({ message: "patientId is required" });
+    }
+    if (String(appointment.patientId) !== String(req.body.patientId)) {
+      return res.status(403).json({ message: "You can only update your own appointments" });
+    }
+
+    if (!editableStatuses.has(appointment.status)) {
+      return res.status(409).json({
+        message: `Appointments with status "${appointment.status}" cannot be updated`
+      });
+    }
+
+    // Patient-scoped update: only reason and shared report ids are editable.
+    const updates = {};
+    if (req.body.reason !== undefined) {
+      updates.reason = String(req.body.reason);
+    }
+    if (req.body.reportIds !== undefined) {
+      if (!Array.isArray(req.body.reportIds)) {
+        return res.status(400).json({ message: "reportIds must be an array" });
+      }
+      if (req.body.reportIds.length > 50) {
+        return res.status(400).json({ message: "Too many reports selected" });
+      }
+      for (const reportId of req.body.reportIds) {
+        if (!isValidObjectId(String(reportId))) {
+          return res.status(400).json({ message: "Each report id must be a valid MongoDB ObjectId" });
+        }
+      }
+      updates.reportIds = req.body.reportIds;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No valid fields provided. Only reason and reportIds are allowed." });
+    }
+
+    Object.assign(appointment, updates);
+    await appointment.save();
+
+    return res.json({
+      message: "Appointment details updated successfully",
+      appointment: sanitizeAppointment(appointment)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update appointment details", error: error.message });
   }
 };
 

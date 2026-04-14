@@ -18,8 +18,9 @@ import {
   Video
 } from 'lucide-react';
 import { cn, Card, Button, StatusBadge } from '../components/ui';
-import { mockDoctors } from '../data/mockDoctors';
 import { appointmentRequest } from '../lib/api';
+import { fetchDoctorsByIds, formatDoctorDisplayName } from '../lib/doctors';
+import { patientRequest } from '../lib/patientRequest';
 import { getResolvedVisitMode } from '../lib/telemedicine';
 
 function formatTime12h(time24) {
@@ -50,16 +51,18 @@ function appointmentTimestamp(apt) {
   return new Date(`${apt.slotDate}T${apt.slotTime || '00:00'}:00`).getTime();
 }
 
-function getDoctorInfo(doctorId) {
-  return mockDoctors.find((d) => d._id === doctorId) || null;
-}
-
 const STATUS_FILTERS = ['all', 'pending', 'confirmed', 'completed', 'cancelled'];
 
 function formatRef(id) {
   if (!id) return '';
   const s = String(id);
   return s.length > 10 ? `${s.slice(0, 8)}…` : s;
+}
+
+function getAppointmentRecordId(apt) {
+  if (!apt) return '';
+  const raw = apt.id ?? apt._id;
+  return raw != null && raw !== '' ? String(raw) : '';
 }
 
 export default function MyAppointments({ patient, profileReady = true, onRetryProfile }) {
@@ -77,21 +80,34 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
   const [message, setMessage] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [cancellingId, setCancellingId] = useState(null);
+  const [doctorsById, setDoctorsById] = useState({});
+  const [reports, setReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [editingAppointmentId, setEditingAppointmentId] = useState(null);
+  const [editReason, setEditReason] = useState('');
+  const [editReportIds, setEditReportIds] = useState([]);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editPanelMessage, setEditPanelMessage] = useState(null);
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = async (options = {}) => {
+    const { skipLoading = false } = options;
     if (!patientRecordId) {
       setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
+      if (!skipLoading) {
+        setLoading(true);
+      }
       const data = await appointmentRequest(`?patientId=${encodeURIComponent(patientRecordId)}`, getToken);
       setAppointments(data.appointments || []);
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to load appointments' });
     } finally {
-      setLoading(false);
+      if (!skipLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -103,6 +119,120 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
     }
     fetchAppointments();
   }, [patientRecordId, profileReady]);
+
+  useEffect(() => {
+    let active = true;
+    const doctorIds = [...new Set(appointments.map((apt) => apt.doctorId).filter(Boolean))];
+
+    if (doctorIds.length === 0) {
+      setDoctorsById({});
+      return;
+    }
+
+    const loadDoctors = async () => {
+      const map = await fetchDoctorsByIds(doctorIds);
+      if (active) {
+        setDoctorsById(map);
+      }
+    };
+
+    loadDoctors();
+    return () => {
+      active = false;
+    };
+  }, [appointments]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadReports = async () => {
+      if (!profileReady || !patientRecordId) {
+        setReports([]);
+        return;
+      }
+      try {
+        setReportsLoading(true);
+        const data = await patientRequest('/reports', getToken);
+        if (active) {
+          setReports(Array.isArray(data?.reports) ? data.reports : []);
+        }
+      } catch {
+        if (active) {
+          setReports([]);
+        }
+      } finally {
+        if (active) {
+          setReportsLoading(false);
+        }
+      }
+    };
+
+    loadReports();
+    return () => {
+      active = false;
+    };
+  }, [profileReady, patientRecordId, getToken]);
+
+  const startEditAppointment = (apt) => {
+    const aid = getAppointmentRecordId(apt);
+    setEditPanelMessage(null);
+    setEditingAppointmentId(aid);
+    setEditReason(typeof apt.reason === 'string' ? apt.reason : '');
+    setEditReportIds(Array.isArray(apt.reportIds) ? apt.reportIds.map(String) : []);
+  };
+
+  const cancelEditAppointment = () => {
+    setEditingAppointmentId(null);
+    setEditReason('');
+    setEditReportIds([]);
+    setEditPanelMessage(null);
+  };
+
+  const saveEditAppointment = async (appointmentId) => {
+    const id = String(appointmentId || '').trim();
+    if (!id) {
+      setEditPanelMessage({ type: 'error', text: 'Missing appointment id. Refresh the page and try again.' });
+      return;
+    }
+    if (!patientRecordId) {
+      setEditPanelMessage({ type: 'error', text: 'Patient record not loaded.' });
+      return;
+    }
+    try {
+      setSavingEdit(true);
+      setEditPanelMessage(null);
+      const body = {
+        patientId: patientRecordId,
+        reason: editReason.trim(),
+        reportIds: editReportIds
+      };
+      try {
+        await appointmentRequest(`/${id}/patient-update`, getToken, {
+          method: 'PATCH',
+          body
+        });
+      } catch (err) {
+        // Backward compatibility for environments still running older appointment-service builds.
+        if (/404/.test(String(err?.message || ''))) {
+          await appointmentRequest(`/${id}`, getToken, {
+            method: 'PATCH',
+            body
+          });
+        } else {
+          throw err;
+        }
+      }
+      setMessage({ type: 'success', text: 'Appointment details updated successfully.' });
+      cancelEditAppointment();
+      await fetchAppointments({ skipLoading: true });
+    } catch (err) {
+      const text = err.message || 'Failed to update appointment details';
+      setEditPanelMessage({ type: 'error', text });
+      setMessage({ type: 'error', text });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleCancel = async (appointmentId) => {
     if (!window.confirm('Cancel this appointment? This action may be subject to the clinic’s cancellation policy.')) {
@@ -310,8 +440,9 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
         </Card>
       ) : (
         <ul className="space-y-4 list-none p-0 m-0">
-          {sortedFiltered.map((apt) => {
-            const doctor = getDoctorInfo(apt.doctorId);
+          {sortedFiltered.map((apt, aptIndex) => {
+            const appointmentId = getAppointmentRecordId(apt);
+            const doctor = doctorsById[String(apt.doctorId)] || null;
             const isCancellable = ['pending', 'confirmed'].includes(apt.status);
             const visitMode = getResolvedVisitMode(apt, doctor);
             const canJoinVideo = visitMode === 'telemedicine' && ['pending', 'confirmed'].includes(apt.status);
@@ -326,7 +457,7 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                     : 'from-slate-400 to-slate-500';
 
             return (
-              <li key={apt.id}>
+              <li key={appointmentId || `apt-${aptIndex}`}>
                 <Card className="p-0 overflow-hidden border-slate-200/80 shadow-md hover:shadow-lg transition-shadow duration-300">
                   <div className="flex flex-col sm:flex-row">
                     <div
@@ -359,13 +490,20 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2 gap-y-1">
                               <h3 className="font-bold text-slate-900 text-lg leading-tight">
-                                {doctor?.name || 'Clinician'}
+                                {formatDoctorDisplayName(doctor?.name, 'Clinician')}
                               </h3>
                               <StatusBadge status={apt.status} />
                             </div>
                             <p className="text-slate-600 text-sm font-medium mt-0.5">
                               {doctor?.speciality || 'Medical specialty'}
                             </p>
+                            {Array.isArray(apt.reportIds) && apt.reportIds.length > 0 && (
+                              <p className="text-xs text-slate-600 mt-2 flex items-center gap-1.5">
+                                <FileText size={12} className="shrink-0 text-slate-400" />
+                                {apt.reportIds.length} report{apt.reportIds.length === 1 ? '' : 's'} attached to this
+                                visit
+                              </p>
+                            )}
                             <p className="text-xs mt-2">
                               <span
                                 className={cn(
@@ -405,7 +543,7 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                           <div className="flex items-center justify-between lg:justify-end gap-4">
                             <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
                               <Hash size={12} />
-                              {formatRef(apt.id)}
+                              {formatRef(appointmentId)}
                             </span>
                             <span className="text-lg font-bold text-slate-900 tabular-nums">
                               Rs. {apt.amount?.toLocaleString()}
@@ -421,8 +559,16 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                             visit.
                           </p>
                           <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => startEditAppointment(apt)}
+                              className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-slate-700 hover:text-white hover:bg-slate-800 border border-slate-200 hover:border-slate-800 px-4 py-2.5 rounded-xl transition-colors shrink-0"
+                            >
+                              <FileText size={16} />
+                              Edit reason/reports
+                            </button>
                             {canJoinVideo && (
-                              <Link to={`/appointments/${apt.id}/telemedicine`}>
+                              <Link to={`/appointments/${appointmentId}/telemedicine`}>
                                 <button
                                   type="button"
                                   className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-blue-700 hover:text-white hover:bg-blue-700 border border-blue-200 hover:border-blue-700 px-4 py-2.5 rounded-xl transition-colors shrink-0"
@@ -434,12 +580,109 @@ export default function MyAppointments({ patient, profileReady = true, onRetryPr
                             )}
                             <button
                               type="button"
-                              onClick={() => handleCancel(apt.id)}
-                              disabled={cancellingId === apt.id}
+                              onClick={() => handleCancel(appointmentId)}
+                              disabled={cancellingId === appointmentId}
                               className="inline-flex items-center justify-center gap-2 text-sm font-semibold text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600 px-4 py-2.5 rounded-xl transition-colors disabled:opacity-50 shrink-0"
                             >
                               <XCircle size={16} />
-                              {cancellingId === apt.id ? 'Cancelling…' : 'Cancel visit'}
+                              {cancellingId === appointmentId ? 'Cancelling…' : 'Cancel visit'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {appointmentId && editingAppointmentId === appointmentId && (
+                        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                          {editPanelMessage && (
+                            <div
+                              role="alert"
+                              className={cn(
+                                'rounded-lg border px-3 py-2.5 text-sm flex items-start gap-2',
+                                editPanelMessage.type === 'error'
+                                  ? 'bg-red-50 text-red-800 border-red-200'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              )}
+                            >
+                              {editPanelMessage.type === 'error' ? (
+                                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                              ) : (
+                                <CheckCircle size={16} className="shrink-0 mt-0.5" />
+                              )}
+                              <span className="font-medium leading-snug">{editPanelMessage.text}</span>
+                            </div>
+                          )}
+                          <div>
+                            <label className="text-sm font-semibold text-slate-800 mb-1.5 block">Reason for visit</label>
+                            <textarea
+                              value={editReason}
+                              onChange={(e) => setEditReason(e.target.value)}
+                              maxLength={500}
+                              rows={3}
+                              className="block w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-slate-900 text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-blue-600/25 focus:border-blue-500 outline-none resize-none"
+                              placeholder="Update the consultation reason..."
+                            />
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-semibold text-slate-800 mb-2">Attach uploaded reports</p>
+                            {reportsLoading ? (
+                              <p className="text-sm text-slate-500">Loading reports...</p>
+                            ) : reports.length === 0 ? (
+                              <p className="text-sm text-slate-500">No uploaded reports found.</p>
+                            ) : (
+                              <ul className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 max-h-44 overflow-y-auto">
+                                {reports.map((report) => {
+                                  const reportId = report?._id ? String(report._id) : '';
+                                  if (!reportId) return null;
+                                  return (
+                                    <li key={reportId}>
+                                      <label className="flex items-start gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-50">
+                                        <input
+                                          type="checkbox"
+                                          className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                          checked={editReportIds.includes(reportId)}
+                                          onChange={() =>
+                                            setEditReportIds((prev) =>
+                                              prev.includes(reportId)
+                                                ? prev.filter((id) => id !== reportId)
+                                                : [...prev, reportId]
+                                            )
+                                          }
+                                        />
+                                        <span className="min-w-0">
+                                          <span className="font-medium text-slate-800 block truncate">
+                                            {report.title || 'Untitled report'}
+                                          </span>
+                                          {report.fileName && (
+                                            <span className="text-xs text-slate-500 font-mono block truncate">
+                                              {report.fileName}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </label>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <button
+                              type="button"
+                              onClick={cancelEditAppointment}
+                              className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-white"
+                              disabled={savingEdit}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveEditAppointment(appointmentId)}
+                              className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                              disabled={savingEdit}
+                            >
+                              {savingEdit ? 'Saving...' : 'Save changes'}
                             </button>
                           </div>
                         </div>
