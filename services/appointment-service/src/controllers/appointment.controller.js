@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
+import axios from "axios";
 
 const editableStatuses = new Set(["pending", "confirmed"]);
 const validStatuses = new Set(["pending", "confirmed", "cancelled", "completed"]);
@@ -159,6 +160,7 @@ export const getAppointmentById = async (req, res) => {
 export const listAppointments = async (req, res) => {
   try {
     const { patientId, doctorId, status, paymentStatus, slotDate } = req.query;
+    const { atoken } = req.headers;
     const query = {};
 
     if (patientId) {
@@ -195,9 +197,44 @@ export const listAppointments = async (req, res) => {
 
     const appointments = await Appointment.find(query).sort({ slotDate: 1, slotTime: 1, createdAt: -1 });
 
+    // Enrich with names if it's an admin request
+    let enrichedAppointments = appointments.map(sanitizeAppointment);
+
+    if (req.user?.role === 'admin' && atoken) {
+      try {
+        // Fetch doctors and patients in parallel
+        const [doctorsRes, patientsRes] = await Promise.all([
+          axios.post('http://localhost:4000/api/admin/all-doctors', {}, { headers: { atoken } }).catch(() => ({ data: { success: false } })),
+          axios.get('http://localhost:8002/api/patients/admin/users', { headers: { atoken } }).catch(() => ({ data: { success: false } }))
+        ]);
+
+        const doctorsMap = {};
+        if (doctorsRes.data?.success) {
+          doctorsRes.data.doctors.forEach(doc => {
+            doctorsMap[doc._id] = doc.name;
+          });
+        }
+
+        const patientsMap = {};
+        if (patientsRes.data?.users) {
+          patientsRes.data.users.forEach(pat => {
+            patientsMap[pat.id || pat._id] = pat.name;
+          });
+        }
+
+        enrichedAppointments = enrichedAppointments.map(app => ({
+          ...app,
+          patientName: patientsMap[app.patientId] || "Unknown Patient",
+          doctorName: doctorsMap[app.doctorId] || "Unknown Doctor"
+        }));
+      } catch (err) {
+        console.error("Enrichment failed:", err.message);
+      }
+    }
+
     return res.json({
       count: appointments.length,
-      appointments: appointments.map(sanitizeAppointment)
+      appointments: enrichedAppointments
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to list appointments", error: error.message });
