@@ -5,6 +5,7 @@ import {
   getAppointmentById,
   getAppointmentStatus,
   listAppointments,
+  updatePatientAppointment,
   updateAppointment
 } from "../controllers/appointment.controller.js";
 import { authenticateJwt } from "../middleware/authMiddleware.js";
@@ -17,7 +18,8 @@ router.get("/", listAppointments);
 router.post("/", createAppointment);
 router.get("/:id", getAppointmentById);
 router.get("/:id/status", getAppointmentStatus);
-router.patch("/:id", updateAppointment);
+router.patch("/:id/patient-update", updatePatientAppointment);
 router.patch("/:id/cancel", cancelAppointment);
+router.patch("/:id", updateAppointment);
 
 export default router;

@@ -15,6 +15,7 @@ const AddDoctor = () => {
   const [speciality, setSpeciality] = useState('General Physician');
   const [degree, setDegree] = useState('');
   const [address, setAddress] = useState('');
+  const [consultationMode, setConsultationMode] = useState('in_person_only');
 
   const { backendUrl, aToken } = useContext(AdminContext);
 
@@ -39,6 +40,7 @@ const AddDoctor = () => {
       formData.append('address', address);
       formData.append('available', true); // Default available
       formData.append('status', 'approved'); // satisfy backend validation
+      formData.append('consultationMode', consultationMode);
 
       const { data } = await axios.post(backendUrl + '/api/admin/add-doctor', formData, {
         headers: { atoken: aToken }
@@ -55,6 +57,7 @@ const AddDoctor = () => {
         setDegree('');
         setFees('');
         setAbout('');
+        setConsultationMode('in_person_only');
       } else {
         toast.error(data.message);
       }
@@ -191,6 +194,19 @@ const AddDoctor = () => {
               placeholder="Fee" 
               required 
             />
+          </div>
+
+          <div className="form-item">
+            <p>Consultation Mode</p>
+            <select
+              onChange={(e) => setConsultationMode(e.target.value)}
+              value={consultationMode}
+              name="consultationMode"
+              required
+            >
+              <option value="in_person_only">In-person only</option>
+              <option value="both">In-person + Telemedicine</option>
+            </select>
           </div>
         </div>
 

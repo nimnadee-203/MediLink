@@ -5,7 +5,7 @@ import { connectDB } from './config/db.js';
 dotenv.config();
 
 const app = express();
-const port = 8007;
+const port = process.env.PORT || 8007;
 
 app.get('/', (req, res) => {
   res.send('Telemedicine Service is running');

@@ -12,10 +12,11 @@ import jwt from 'jsonwebtoken'
 export const addDoctor = async (req, res)=>{
     try{
         
-        const {name,email,password,speciality,degree,experience,about,available,fees,address,status} = req.body;
+        const {name,email,password,speciality,degree,experience,about,available,fees,address,status,consultationMode} = req.body;
         const imageFile = req.file
         const normalizedEmail = (email || '').trim().toLowerCase();
         const normalizedPassword = (password || '').trim();
+        const parsedAvailable = available === 'true' || available === true;
 
         // console.log({name,email,password,speciality,degree,experience,about,available,fees,address,status},imageFile)
 
@@ -54,8 +55,11 @@ export const addDoctor = async (req, res)=>{
             degree,
             experience,
             about,
+            consultationMode: consultationMode === 'both' ? 'both' : 'in_person_only',
+            available: parsedAvailable,
             fees,
             address:address,
+            status: status || 'approved',
             date:Date.now()
         }
 
@@ -108,7 +112,21 @@ export const loginDoctor = async (req, res) => {
             return res.json({ success: false, message: "Invalid credentials" });
         }
 
-        const isMatch = await bcrypt.compare(normalizedPassword, doctor.password);
+        let isMatch = false;
+        const storedPassword = String(doctor.password || '');
+
+        if (storedPassword.startsWith('$2a$') || storedPassword.startsWith('$2b$') || storedPassword.startsWith('$2y$')) {
+            isMatch = await bcrypt.compare(normalizedPassword, storedPassword);
+        } else {
+            // Backward compatibility for legacy plaintext passwords in existing test data.
+            isMatch = normalizedPassword === storedPassword;
+            if (isMatch) {
+                const salt = await bcrypt.genSalt(10);
+                doctor.password = await bcrypt.hash(normalizedPassword, salt);
+                await doctor.save();
+            }
+        }
+
         if (!isMatch) {
             return res.json({ success: false, message: "Invalid credentials" });
         }
@@ -177,7 +195,7 @@ export const changeAvailability = async (req,res) => {
 // API to update doctor details (excluding password)
 export const updateDoctor = async (req, res) => {
     try {
-        const { docId, name, speciality, degree, experience, about, fees, address, status, available } = req.body
+        const { docId, name, speciality, degree, experience, about, fees, address, status, available, consultationMode } = req.body
         const imageFile = req.file
 
         const updateData = {
@@ -189,7 +207,8 @@ export const updateDoctor = async (req, res) => {
             fees,
             address,
             status,
-            available: available === 'true' || available === true
+            available: available === 'true' || available === true,
+            consultationMode: consultationMode === 'both' ? 'both' : 'in_person_only'
         }
 
         if (imageFile) {
