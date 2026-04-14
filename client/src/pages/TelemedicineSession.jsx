@@ -4,7 +4,7 @@ import { useAuth, useUser } from '@clerk/clerk-react';
 import { AlertCircle, ArrowLeft, Loader2, Video } from 'lucide-react';
 import { Card, Button } from '../components/ui';
 import { appointmentRequest } from '../lib/api';
-import { mockDoctors } from '../data/mockDoctors';
+import { fetchDoctorById, formatDoctorDisplayName } from '../lib/doctors';
 import { buildMockRoomName, getResolvedVisitMode } from '../lib/telemedicine';
 
 const JITSI_SCRIPT_URL = 'https://meet.jit.si/external_api.js';
@@ -43,14 +43,10 @@ export default function TelemedicineSession() {
   const jitsiApiRef = useRef(null);
 
   const [appointment, setAppointment] = useState(null);
+  const [doctor, setDoctor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
-
-  const doctor = useMemo(() => {
-    if (!appointment) return null;
-    return mockDoctors.find((d) => d._id === appointment.doctorId) || null;
-  }, [appointment]);
 
   const visitMode = useMemo(
     () => getResolvedVisitMode(appointment, doctor),
@@ -71,7 +67,15 @@ export default function TelemedicineSession() {
         setLoading(true);
         setError('');
         const data = await appointmentRequest(`/${appointmentId}`, getToken);
-        setAppointment(data.appointment || null);
+        const appointmentData = data.appointment || null;
+        setAppointment(appointmentData);
+
+        if (appointmentData?.doctorId) {
+          const doctorData = await fetchDoctorById(appointmentData.doctorId).catch(() => null);
+          setDoctor(doctorData);
+        } else {
+          setDoctor(null);
+        }
       } catch (err) {
         setError(err.message || 'Failed to load appointment');
       } finally {
@@ -176,7 +180,7 @@ export default function TelemedicineSession() {
       <Card className="border-slate-200/80 shadow-md p-6">
         <h1 className="text-2xl font-bold text-slate-900">Telemedicine Consultation</h1>
         <p className="text-slate-600 mt-2 text-sm">
-          Doctor: <strong>{doctor?.name || 'Clinician'}</strong> | Date: <strong>{appointment.slotDate}</strong> | Time: <strong>{appointment.slotTime}</strong>
+          Doctor: <strong>{formatDoctorDisplayName(doctor?.name, 'Clinician')}</strong> | Date: <strong>{appointment.slotDate}</strong> | Time: <strong>{appointment.slotTime}</strong>
         </p>
         <p className="text-slate-500 text-xs mt-2">Room: {roomName}</p>
 

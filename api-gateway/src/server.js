@@ -10,6 +10,7 @@ const port = process.env.PORT || 8000;
 
 const patientServiceTarget = process.env.PATIENT_SERVICE_URL || 'http://localhost:8002';
 const appointmentServiceTarget = process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:8004';
+const doctorServiceTarget = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 
 let verifyTokenLoader;
@@ -73,7 +74,15 @@ const createServiceProxy = (target) =>
     target,
     changeOrigin: true,
     onProxyReq: (proxyReq, req) => {
-      const forwardedHeaders = ['authorization', 'x-auth-user-id', 'x-clerk-email', 'x-clerk-name', 'x-clerk-phone'];
+      const forwardedHeaders = [
+        'authorization',
+        'dtoken',
+        'atoken',
+        'x-auth-user-id',
+        'x-clerk-email',
+        'x-clerk-name',
+        'x-clerk-phone'
+      ];
       for (const header of forwardedHeaders) {
         const value = req.headers[header];
         if (value) {
@@ -85,7 +94,10 @@ const createServiceProxy = (target) =>
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, Dtoken, Atoken, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone'
+  );
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
@@ -104,6 +116,10 @@ app.use(
   withAuthContext,
   createServiceProxy(appointmentServiceTarget)
 );
+
+app.use('/api/doctor', createServiceProxy(doctorServiceTarget));
+
+app.use('/api/admin', createServiceProxy(doctorServiceTarget));
 
 app.use(
   '/patient-uploads',

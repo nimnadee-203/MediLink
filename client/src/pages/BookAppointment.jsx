@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import {
@@ -14,11 +14,13 @@ import {
   Info,
   Stethoscope,
   RefreshCw,
-  Video
+  Video,
+  FileText
 } from 'lucide-react';
 import { cn, Card, Button } from '../components/ui';
-import { mockDoctors, TIME_SLOTS, CONSULTATION_MODE_LABELS } from '../data/mockDoctors';
+import { TIME_SLOTS, CONSULTATION_MODE_LABELS, fetchDoctorById, formatDoctorDisplayName } from '../lib/doctors';
 import { appointmentRequest } from '../lib/api';
+import { patientRequest } from '../lib/patientRequest';
 import { saveAppointmentVisitMode } from '../lib/telemedicine';
 
 function getNextDays(count = 14) {
@@ -110,7 +112,63 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
   const navigate = useNavigate();
   const { getToken } = useAuth();
 
-  const doctor = mockDoctors.find((d) => d._id === doctorId);
+  const [doctor, setDoctor] = useState(null);
+  const [doctorLoading, setDoctorLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadDoctor = async () => {
+      try {
+        setDoctorLoading(true);
+        const data = await fetchDoctorById(doctorId);
+        if (active) {
+          setDoctor(data);
+        }
+      } catch {
+        if (active) {
+          setDoctor(null);
+        }
+      } finally {
+        if (active) {
+          setDoctorLoading(false);
+        }
+      }
+    };
+
+    loadDoctor();
+    return () => {
+      active = false;
+    };
+  }, [doctorId]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadReports = async () => {
+      if (!profileReady) return;
+      try {
+        setReportsLoading(true);
+        const data = await patientRequest('/reports', getToken);
+        if (active) {
+          setReports(Array.isArray(data.reports) ? data.reports : []);
+        }
+      } catch {
+        if (active) {
+          setReports([]);
+        }
+      } finally {
+        if (active) {
+          setReportsLoading(false);
+        }
+      }
+    };
+
+    loadReports();
+    return () => {
+      active = false;
+    };
+  }, [profileReady, getToken]);
 
   const availableDays = useMemo(() => getNextDays(14), []);
 
@@ -120,6 +178,9 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [selectedReportIds, setSelectedReportIds] = useState([]);
 
   const supportsTelemedicine = doctor?.consultationMode === 'both';
 
@@ -131,6 +192,15 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
   }, [patient]);
 
   const currentStep = !selectedDate ? 1 : !selectedTime ? 2 : 3;
+
+  if (doctorLoading) {
+    return (
+      <Card className="border-slate-200/80 shadow-md py-20 text-center">
+        <Loader2 className="w-11 h-11 text-blue-600 animate-spin mx-auto" aria-hidden />
+        <p className="text-slate-700 mt-5 font-semibold text-sm">Loading doctor profile...</p>
+      </Card>
+    );
+  }
 
   if (!doctor) {
     return (
@@ -151,8 +221,30 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
     );
   }
 
-  const bookedSlots = doctor.slots_booked?.[selectedDate ? formatDate(selectedDate) : ''] || [];
-  const bookedSet = useMemo(() => new Set(bookedSlots), [bookedSlots]);
+  const doctorName = formatDoctorDisplayName(doctor.name);
+  const doctorSpeciality =
+    typeof doctor.speciality === 'string' && doctor.speciality.trim()
+      ? doctor.speciality
+      : 'General Physician';
+  const doctorDegree = typeof doctor.degree === 'string' ? doctor.degree : 'MBBS';
+  const doctorExperience = typeof doctor.experience === 'string' ? doctor.experience : '1 Year';
+  const doctorAddress =
+    typeof doctor.address === 'string'
+      ? doctor.address
+      : doctor.address && typeof doctor.address === 'object'
+        ? Object.values(doctor.address).filter(Boolean).join(', ')
+        : 'Sri Lanka';
+  const doctorFees = Number.isFinite(Number(doctor.fees)) ? Number(doctor.fees) : 0;
+  const doctorImage = typeof doctor.image === 'string' && doctor.image ? doctor.image : '';
+
+  const slotsBookedMap =
+    doctor.slots_booked && typeof doctor.slots_booked === 'object' && !Array.isArray(doctor.slots_booked)
+      ? doctor.slots_booked
+      : {};
+
+  const bookedSlotsRaw = slotsBookedMap[selectedDate ? formatDate(selectedDate) : ''];
+  const bookedSlots = Array.isArray(bookedSlotsRaw) ? bookedSlotsRaw : [];
+  const bookedSet = new Set(bookedSlots);
   const { morning, afternoon } = groupSlotsByPeriod(TIME_SLOTS, bookedSet);
   const availableCount = TIME_SLOTS.filter((s) => !bookedSet.has(s)).length;
 
@@ -190,9 +282,10 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
           doctorId: doctor._id,
           slotDate: formatDate(selectedDate),
           slotTime: selectedTime,
-          amount: doctor.fees,
+          amount: doctorFees,
           reason: reason.trim(),
-          visitMode
+          visitMode,
+          ...(selectedReportIds.length > 0 ? { reportIds: selectedReportIds } : {})
         }
       });
 
@@ -209,7 +302,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               appointmentId: createdAppointmentId || '',
               patientId: patientRecordId,
               doctorId: doctor._id,
-              amount: doctor.fees,
+              amount: doctorFees,
               appointmentDate: formatDate(selectedDate)
             }
           }),
@@ -331,7 +424,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
           <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.03\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-90" aria-hidden />
           <div className="relative flex flex-col lg:flex-row gap-8 items-start">
             <img
-              src={doctor.image}
+              src={doctorImage}
               alt=""
               className="w-24 h-24 rounded-2xl border-2 border-white/20 object-cover shadow-xl ring-1 ring-white/10"
             />
@@ -339,27 +432,27 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               <p className="text-xs font-semibold uppercase tracking-widest text-teal-300/90 mb-2">
                 {CONSULTATION_MODE_LABELS[doctor.consultationMode] || CONSULTATION_MODE_LABELS.in_person_only}
               </p>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{doctor.name}</h2>
-              <p className="text-slate-300 mt-1.5 font-medium">{doctor.speciality}</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{doctorName}</h2>
+              <p className="text-slate-300 mt-1.5 font-medium">{doctorSpeciality}</p>
               <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4 text-sm text-slate-300">
                 <span className="inline-flex items-center gap-1.5">
                   <Award size={15} className="text-teal-400 shrink-0" />
-                  {doctor.degree}
+                  {doctorDegree}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Clock size={15} className="text-teal-400 shrink-0" />
-                  {doctor.experience}
+                  {doctorExperience}
                 </span>
                 <span className="inline-flex items-center gap-1.5 min-w-0">
                   <MapPin size={15} className="text-teal-400 shrink-0" />
-                  <span className="truncate">{doctor.address}</span>
+                  <span className="truncate">{doctorAddress}</span>
                 </span>
               </div>
             </div>
             <div className="w-full lg:w-auto lg:min-w-[200px] rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 px-6 py-5 text-center lg:text-left">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Consultation fee</p>
               <p className="text-3xl font-bold text-white mt-2 tabular-nums">
-                Rs. {doctor.fees.toLocaleString()}
+                Rs. {doctorFees.toLocaleString()}
               </p>
               <p className="text-xs text-slate-400 mt-2 leading-relaxed">
                 Billed as shown. Payment terms follow clinic policy.
@@ -561,14 +654,86 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               />
             </div>
 
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                  <FileText size={18} />
+                </span>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Reports & documents</label>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Optional — attach files you uploaded from your dashboard so your clinician can review them.
+                  </p>
+                </div>
+              </div>
+
+              {reportsLoading ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-6 flex items-center justify-center gap-2 text-sm text-slate-600">
+                  <Loader2 size={18} className="animate-spin text-blue-600" />
+                  Loading your reports…
+                </div>
+              ) : reports.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-4 py-5 text-sm text-slate-600">
+                  <p className="font-medium text-slate-700">No reports uploaded yet</p>
+                  <p className="mt-1 text-slate-500 leading-relaxed">
+                    Open <strong>Dashboard</strong> → <strong>Reports & Documents</strong> to upload labs or imaging,
+                    then return here to attach them.
+                  </p>
+                </div>
+              ) : (
+                <ul className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                  {reports.map((r) => {
+                    const id = r._id ? String(r._id) : '';
+                    if (!id) return null;
+                    const checked = selectedReportIds.includes(id);
+                    return (
+                      <li key={id}>
+                        <label className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50/80 transition-colors">
+                          <input
+                            type="checkbox"
+                            className="mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            checked={checked}
+                            onChange={() => {
+                              setSelectedReportIds((prev) =>
+                                prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+                              );
+                            }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="font-semibold text-slate-900 text-sm block truncate">
+                              {r.title?.trim() || 'Untitled report'}
+                            </span>
+                            {r.fileName && (
+                              <span className="text-xs text-slate-500 font-mono truncate block mt-0.5">{r.fileName}</span>
+                            )}
+                            {r.description?.trim() && (
+                              <span className="text-xs text-slate-600 line-clamp-2 mt-1 block">{r.description}</span>
+                            )}
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {selectedReportIds.length > 0 && (
+                <p className="text-xs text-slate-500 mt-2">
+                  {selectedReportIds.length} report{selectedReportIds.length === 1 ? '' : 's'} selected for this visit.
+                </p>
+              )}
+            </div>
+
             <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5 space-y-0 divide-y divide-slate-200/80">
               {[
-                ['Clinician', doctor.name],
-                ['Specialty', doctor.speciality],
+                ['Clinician', doctorName],
+                ['Specialty', doctorSpeciality],
                 ['Date', formatDisplayDate(selectedDate)],
                 ['Time', formatTime12h(selectedTime)],
                 ['Consultation', visitMode === 'telemedicine' ? 'Telemedicine' : 'In-person'],
-                ['Location', doctor.address]
+                ['Location', doctorAddress],
+                ...(selectedReportIds.length > 0
+                  ? [[`Reports shared`, `${selectedReportIds.length} document${selectedReportIds.length === 1 ? '' : 's'}`]]
+                  : [])
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4 py-3 first:pt-0 text-sm">
                   <span className="text-slate-500">{k}</span>
@@ -578,7 +743,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               <div className="flex justify-between items-baseline gap-4 pt-4">
                 <span className="text-sm font-semibold text-slate-700">Total due</span>
                 <span className="text-xl font-bold text-blue-600 tabular-nums">
-                  Rs. {doctor.fees.toLocaleString()}
+                  Rs. {doctorFees.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -614,7 +779,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               ) : (
                 <>
                   <CheckCircle size={20} />
-                  Confirm appointment — Rs. {doctor.fees.toLocaleString()}
+                  Confirm appointment — Rs. {doctorFees.toLocaleString()}
                 </>
               )}
             </Button>

@@ -17,6 +17,12 @@ const doctorSchema = new mongoose.Schema(
   experience: { type: String, required: true },
   about: { type: String, required: true },
 
+  consultationMode: {
+    type: String,
+    enum: ["in_person_only", "both"],
+    default: "in_person_only"
+  },
+
   available: {
     type: Boolean,
     default: true
