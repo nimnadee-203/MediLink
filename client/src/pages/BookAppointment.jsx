@@ -13,11 +13,13 @@ import {
   ChevronRight,
   Info,
   Stethoscope,
-  RefreshCw
+  RefreshCw,
+  Video
 } from 'lucide-react';
 import { cn, Card, Button } from '../components/ui';
-import { mockDoctors, TIME_SLOTS } from '../data/mockDoctors';
+import { mockDoctors, TIME_SLOTS, CONSULTATION_MODE_LABELS } from '../data/mockDoctors';
 import { appointmentRequest } from '../lib/api';
+import { saveAppointmentVisitMode } from '../lib/telemedicine';
 
 function getNextDays(count = 14) {
   const days = [];
@@ -114,9 +116,12 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
 
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
+  const [visitMode, setVisitMode] = useState('in_person');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+
+  const supportsTelemedicine = doctor?.consultationMode === 'both';
 
   /** API returns `id`; some code paths may still use `_id`. */
   const patientRecordId = useMemo(() => {
@@ -178,7 +183,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
     setMessage(null);
 
     try {
-      await appointmentRequest('', getToken, {
+      const result = await appointmentRequest('', getToken, {
         method: 'POST',
         body: {
           patientId: patientRecordId,
@@ -186,12 +191,30 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
           slotDate: formatDate(selectedDate),
           slotTime: selectedTime,
           amount: doctor.fees,
-          reason: reason.trim()
+          reason: reason.trim(),
+          visitMode
         }
       });
 
-      setMessage({ type: 'success', text: 'Your appointment is confirmed. Redirecting to your visits…' });
-      setTimeout(() => navigate('/appointments'), 1600);
+      const createdAppointmentId = result?.appointment?.id || result?.appointment?._id;
+      if (createdAppointmentId) {
+        saveAppointmentVisitMode(createdAppointmentId, visitMode);
+      }
+
+      setMessage({ type: 'success', text: 'Your appointment is confirmed. Redirecting to payment…' });
+      setTimeout(
+        () =>
+          navigate('/payment', {
+            state: {
+              appointmentId: createdAppointmentId || '',
+              patientId: patientRecordId,
+              doctorId: doctor._id,
+              amount: doctor.fees,
+              appointmentDate: formatDate(selectedDate)
+            }
+          }),
+        800
+      );
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to book appointment' });
     } finally {
@@ -314,7 +337,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
             />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold uppercase tracking-widest text-teal-300/90 mb-2">
-                In-person consultation
+                {CONSULTATION_MODE_LABELS[doctor.consultationMode] || CONSULTATION_MODE_LABELS.in_person_only}
               </p>
               <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{doctor.name}</h2>
               <p className="text-slate-300 mt-1.5 font-medium">{doctor.speciality}</p>
@@ -483,6 +506,45 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
 
           <div className="space-y-6">
             <div>
+              <label className="text-sm font-medium text-slate-700 mb-2 block">Consultation type</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setVisitMode('in_person')}
+                  className={cn(
+                    'rounded-xl border px-4 py-3 text-left transition-all',
+                    visitMode === 'in_person'
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 ring-2 ring-blue-600/15'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300'
+                  )}
+                >
+                  <p className="text-sm font-semibold">In-person</p>
+                  <p className="text-xs mt-1 text-slate-500">Visit at clinic location</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => supportsTelemedicine && setVisitMode('telemedicine')}
+                  disabled={!supportsTelemedicine}
+                  className={cn(
+                    'rounded-xl border px-4 py-3 text-left transition-all',
+                    visitMode === 'telemedicine' && supportsTelemedicine
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 ring-2 ring-blue-600/15'
+                      : 'border-slate-200 bg-white text-slate-700',
+                    supportsTelemedicine ? 'hover:border-blue-300' : 'cursor-not-allowed opacity-55'
+                  )}
+                >
+                  <p className="text-sm font-semibold inline-flex items-center gap-1.5">
+                    <Video size={14} /> Telemedicine
+                  </p>
+                  <p className="text-xs mt-1 text-slate-500">
+                    {supportsTelemedicine ? 'Online video consultation' : 'Not available for this doctor'}
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div>
               <div className="flex items-center justify-between gap-2 mb-2">
                 <label htmlFor="visit-reason" className="text-sm font-medium text-slate-700">
                   Reason for visit </label>
@@ -505,6 +567,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
                 ['Specialty', doctor.speciality],
                 ['Date', formatDisplayDate(selectedDate)],
                 ['Time', formatTime12h(selectedTime)],
+                ['Consultation', visitMode === 'telemedicine' ? 'Telemedicine' : 'In-person'],
                 ['Location', doctor.address]
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4 py-3 first:pt-0 text-sm">

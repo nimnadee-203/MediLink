@@ -15,6 +15,11 @@ export const TIME_SLOTS = [
   '16:00', '16:30', '17:00'
 ];
 
+export const CONSULTATION_MODE_LABELS = {
+  in_person_only: 'In-person only',
+  both: 'In-person + Telemedicine'
+};
+
 export const mockDoctors = [
   {
     _id: '665f1a2b3c4d5e6f7a8b9c01',
@@ -24,6 +29,7 @@ export const mockDoctors = [
     experience: '10 years',
     fees: 2500,
     available: true,
+    consultationMode: 'both',
     image: 'https://ui-avatars.com/api/?name=Sarah+Johnson&background=3b82f6&color=fff&size=200&bold=true',
     about: 'Experienced cardiologist specializing in heart disease prevention and treatment of cardiovascular conditions.',
     address: 'Colombo 07',
@@ -37,6 +43,7 @@ export const mockDoctors = [
     experience: '8 years',
     fees: 1500,
     available: true,
+    consultationMode: 'in_person_only',
     image: 'https://ui-avatars.com/api/?name=Amal+Perera&background=10b981&color=fff&size=200&bold=true',
     about: 'Dedicated general physician providing comprehensive primary care services for all age groups.',
     address: 'Kandy',
@@ -50,6 +57,7 @@ export const mockDoctors = [
     experience: '12 years',
     fees: 3000,
     available: true,
+    consultationMode: 'both',
     image: 'https://ui-avatars.com/api/?name=Nisha+Fernando&background=8b5cf6&color=fff&size=200&bold=true',
     about: 'Specialist in skin disorders, cosmetic dermatology, and advanced skin treatments.',
     address: 'Colombo 03',
@@ -63,6 +71,7 @@ export const mockDoctors = [
     experience: '15 years',
     fees: 3500,
     available: true,
+    consultationMode: 'in_person_only',
     image: 'https://ui-avatars.com/api/?name=Kavindu+Silva&background=f59e0b&color=fff&size=200&bold=true',
     about: 'Expert orthopedic surgeon specializing in joint replacements and sports injuries.',
     address: 'Galle',
@@ -76,6 +85,7 @@ export const mockDoctors = [
     experience: '9 years',
     fees: 2000,
     available: true,
+    consultationMode: 'both',
     image: 'https://ui-avatars.com/api/?name=Rashmi+Dias&background=ec4899&color=fff&size=200&bold=true',
     about: 'Compassionate pediatrician dedicated to child healthcare and developmental assessments.',
     address: 'Colombo 05',
@@ -89,6 +99,7 @@ export const mockDoctors = [
     experience: '14 years',
     fees: 4000,
     available: true,
+    consultationMode: 'both',
     image: 'https://ui-avatars.com/api/?name=Tharindu+Bandara&background=6366f1&color=fff&size=200&bold=true',
     about: 'Leading neurologist specializing in brain and nervous system disorders.',
     address: 'Colombo 08',
@@ -102,6 +113,7 @@ export const mockDoctors = [
     experience: '11 years',
     fees: 3000,
     available: true,
+    consultationMode: 'both',
     image: 'https://ui-avatars.com/api/?name=Chamari+J&background=14b8a6&color=fff&size=200&bold=true',
     about: 'Experienced gynecologist providing comprehensive women\'s healthcare and obstetric services.',
     address: 'Negombo',
@@ -115,6 +127,7 @@ export const mockDoctors = [
     experience: '7 years',
     fees: 2500,
     available: true,
+    consultationMode: 'in_person_only',
     image: 'https://ui-avatars.com/api/?name=Ruwan+W&background=f97316&color=fff&size=200&bold=true',
     about: 'ENT specialist treating conditions related to ear, nose, throat, head, and neck.',
     address: 'Matara',

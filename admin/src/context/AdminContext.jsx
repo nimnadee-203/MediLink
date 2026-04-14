@@ -6,6 +6,7 @@ export const AdminContext = createContext();
 
 const AdminContextProvider = (props) => {
     const [aToken, setAToken] = useState(localStorage.getItem('aToken') ? localStorage.getItem('aToken') : '');
+    const [dToken, setDToken] = useState(localStorage.getItem('dToken') ? localStorage.getItem('dToken') : '');
     const [dashData, setDashData] = useState(false);
     const [doctors, setDoctors] = useState([]);
     const [appointments, setAppointments] = useState([]);
@@ -130,6 +131,7 @@ const AdminContextProvider = (props) => {
 
     const value = {
         aToken, setAToken,
+        dToken, setDToken,
         backendUrl,
         dashData,
         getDashData,

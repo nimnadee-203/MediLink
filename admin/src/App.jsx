@@ -9,17 +9,29 @@ import Appointments from './pages/Appointments';
 import AddDoctor from './pages/AddDoctor';
 import DoctorList from './pages/DoctorList';
 import DoctorProfile from './pages/DoctorProfile';
+import DoctorHome from './pages/DoctorHome';
 import Login from './pages/Login';
 import { AdminContext } from './context/AdminContext';
 
 function App() {
-  const { aToken } = useContext(AdminContext);
+  const { aToken, dToken } = useContext(AdminContext);
 
-  if (!aToken) {
+  if (!aToken && !dToken) {
     return (
       <>
         <ToastContainer />
         <Login />
+      </>
+    );
+  }
+
+  if (dToken && !aToken) {
+    return (
+      <>
+        <ToastContainer />
+        <Routes>
+          <Route path="*" element={<DoctorHome />} />
+        </Routes>
       </>
     );
   }

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import connectCloudinary from './config/cloudinary.js';
 import adminRouter from './routes/admin.routes.js';
+import doctorRouter from './routes/doctor.routes.js';
 import cors from 'cors';
 
 dotenv.config();
@@ -16,6 +17,7 @@ app.use(cors())
 
 //api endpoints
 app.use('/api/admin',adminRouter)
+app.use('/api/doctor',doctorRouter)
 //localhost:4000/api/admin/add-doctor
 
 

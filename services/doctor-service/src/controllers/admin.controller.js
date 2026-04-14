@@ -14,28 +14,30 @@ export const addDoctor = async (req, res)=>{
         
         const {name,email,password,speciality,degree,experience,about,available,fees,address,status} = req.body;
         const imageFile = req.file
+        const normalizedEmail = (email || '').trim().toLowerCase();
+        const normalizedPassword = (password || '').trim();
 
         // console.log({name,email,password,speciality,degree,experience,about,available,fees,address,status},imageFile)
 
         //checking for all data to add doctor
-        if(!name || !email || !password || !speciality || !degree || !experience || !about || !fees || !address || !status || !imageFile){
+        if(!name || !normalizedEmail || !normalizedPassword || !speciality || !degree || !experience || !about || !fees || !address || !status || !imageFile){
             return res.json({success:false,message:"Missing Details"})
         }
 
         //Validating email format 
-        if(!validator.isEmail(email)){
+        if(!validator.isEmail(normalizedEmail)){
             return res.json({success:false,message:"Please enter valid email"})
         }
 
         //Validating strong password
-        if(password.length < 8){
+        if(normalizedPassword.length < 8){
             return res.json({success:false,message:"Please enter strong password"})
 
         }
 
         //hashing doctor password
         const salt =  await bcrypt.genSalt(10)
-        const hashedPassword = await bcrypt.hash(password,salt)
+        const hashedPassword = await bcrypt.hash(normalizedPassword,salt)
 
         //Upload image to cloudinary
         const imageUpload = await cloudinary.uploader.upload(imageFile.path,{resource_type:"image"})
@@ -45,7 +47,7 @@ export const addDoctor = async (req, res)=>{
 
         const doctorData = {
             name,
-            email,
+            email: normalizedEmail,
             image:imageUrl,
             password:hashedPassword,
             speciality,
@@ -87,6 +89,35 @@ export const loginAdmin = async (req,res)=>{
         console.log(error)
         res.json({success:false,message:error.message})
 
+    }
+}
+
+//API for doctor login
+export const loginDoctor = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const normalizedEmail = (email || '').trim().toLowerCase();
+        const normalizedPassword = (password || '').trim();
+
+        if (!normalizedEmail || !normalizedPassword) {
+            return res.json({ success: false, message: "Email and password are required" });
+        }
+
+        const doctor = await doctorModel.findOne({ email: normalizedEmail });
+        if (!doctor) {
+            return res.json({ success: false, message: "Invalid credentials" });
+        }
+
+        const isMatch = await bcrypt.compare(normalizedPassword, doctor.password);
+        if (!isMatch) {
+            return res.json({ success: false, message: "Invalid credentials" });
+        }
+
+        const token = jwt.sign({ id: doctor._id, role: 'doctor' }, process.env.JWT_SECRET);
+        return res.json({ success: true, token, message: "Doctor logged in successfully" });
+    } catch (error) {
+        console.log(error);
+        return res.json({ success: false, message: error.message });
     }
 }
 

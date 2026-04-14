@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, MapPin, Clock, Star, Stethoscope } from 'lucide-react';
+import { Search, MapPin, Clock, Star, Stethoscope, Video } from 'lucide-react';
 import { cn, Card, Button } from '../components/ui';
-import { mockDoctors, SPECIALITIES } from '../data/mockDoctors';
+import { mockDoctors, SPECIALITIES, CONSULTATION_MODE_LABELS } from '../data/mockDoctors';
 
 export default function DoctorsList() {
   const [searchParams] = useSearchParams();
   const [selectedSpeciality, setSelectedSpeciality] = useState('');
+  const [selectedConsultationMode, setSelectedConsultationMode] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     setSearchQuery(searchParams.get('q') ?? '');
     setSelectedSpeciality(searchParams.get('speciality') ?? '');
+    setSelectedConsultationMode(searchParams.get('consultationMode') ?? '');
   }, [searchParams]);
 
   const filteredDoctors = mockDoctors.filter((doc) => {
     if (!doc.available) return false;
     if (selectedSpeciality && doc.speciality !== selectedSpeciality) return false;
+    if (selectedConsultationMode === 'telemedicine' && doc.consultationMode !== 'both') return false;
+    if (selectedConsultationMode === 'in_person_only' && doc.consultationMode !== 'in_person_only') return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
@@ -59,6 +63,16 @@ export default function DoctorsList() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+
+        <select
+          value={selectedConsultationMode}
+          onChange={(e) => setSelectedConsultationMode(e.target.value)}
+          className="rounded-xl border border-gray-200 bg-white py-3 px-4 text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none shadow-sm min-w-[220px]"
+        >
+          <option value="">All Consultation Types</option>
+          <option value="telemedicine">Telemedicine Available</option>
+          <option value="in_person_only">In-person Only</option>
+        </select>
       </div>
 
       {filteredDoctors.length === 0 ? (
@@ -97,6 +111,10 @@ export default function DoctorsList() {
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Star size={14} className="text-amber-400 fill-amber-400" />
                   <span>{doctor.degree}</span>
+                </div>
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 text-sky-700 px-3 py-1 text-xs font-semibold border border-sky-100">
+                  <Video size={12} />
+                  {CONSULTATION_MODE_LABELS[doctor.consultationMode] || CONSULTATION_MODE_LABELS.in_person_only}
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
