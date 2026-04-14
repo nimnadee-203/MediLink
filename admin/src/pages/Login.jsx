@@ -17,6 +17,7 @@ const Login = () => {
                 const { data } = await axios.post(backendUrl + '/api/admin/login', { email, password });
                 if (data.success) {
                     localStorage.setItem('aToken', data.token);
+                    localStorage.setItem('adminEmail', email);
                     setAToken(data.token);
                     toast.success(data.message || "Logged in successfully!");
                 } else {

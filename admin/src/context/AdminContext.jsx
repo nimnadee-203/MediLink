@@ -89,6 +89,13 @@ const AdminContextProvider = (props) => {
         }
     }
 
+    const logout = () => {
+        setAToken('');
+        localStorage.removeItem('aToken');
+        localStorage.removeItem('adminEmail'); // We'll store this in Login.jsx
+        toast.info("Logged out smoothly");
+    }
+
     const value = {
         aToken, setAToken,
         backendUrl,
@@ -98,7 +105,8 @@ const AdminContextProvider = (props) => {
         getAllDoctors,
         changeAvailability,
         updateDoctor,
-        deleteDoctor
+        deleteDoctor,
+        logout
     };
 
     return (
