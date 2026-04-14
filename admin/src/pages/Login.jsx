@@ -2,33 +2,43 @@ import React, { useContext, useState } from "react";
 import axios from 'axios';
 import { AdminContext } from "../context/AdminContext";
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
+    const navigate = useNavigate();
     const [state, setState] = useState('Admin');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
-    const { setAToken, backendUrl } = useContext(AdminContext);
+    const { setAToken, setDToken, backendUrl } = useContext(AdminContext);
 
     const onSubmitHandler = async (event) => {
         event.preventDefault();
         try {
+            const normalizedEmail = email.trim().toLowerCase();
+            const normalizedPassword = password.trim();
+
             if (state === 'Admin') {
-                const { data } = await axios.post(backendUrl + '/api/admin/login', { email, password });
+                const { data } = await axios.post(backendUrl + '/api/admin/login', { email: normalizedEmail, password: normalizedPassword });
                 if (data.success) {
                     localStorage.setItem('aToken', data.token);
+                    localStorage.removeItem('dToken');
                     setAToken(data.token);
+                    setDToken('');
                     toast.success(data.message || "Logged in successfully!");
+                    navigate('/');
                 } else {
                     toast.error(data.message);
                 }
             } else {
-                // Doctor login mock
-                const { data } = await axios.post(backendUrl + '/api/doctor/login', { email, password });
+                const { data } = await axios.post(backendUrl + '/api/doctor/login', { email: normalizedEmail, password: normalizedPassword });
                 if (data.success) {
                     localStorage.setItem('dToken', data.token);
+                    localStorage.removeItem('aToken');
+                    setAToken('');
+                    setDToken(data.token);
                     toast.success(data.message || "Logged in successfully!");
-                    // setDToken(data.token); // Add this context when implementing doctor
+                    navigate('/doctor-home');
                 } else {
                     toast.error(data.message);
                 }
@@ -98,4 +108,4 @@ const Login = () => {
     );
 };
 
-export default Login;
+export default Login;
