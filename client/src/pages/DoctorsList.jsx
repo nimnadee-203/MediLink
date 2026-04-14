@@ -7,18 +7,26 @@ import { mockDoctors, SPECIALITIES, CONSULTATION_MODE_LABELS } from '../data/moc
 export default function DoctorsList() {
   const [searchParams] = useSearchParams();
   const [selectedSpeciality, setSelectedSpeciality] = useState('');
+  const [recommendedSpecialities, setRecommendedSpecialities] = useState([]);
   const [selectedConsultationMode, setSelectedConsultationMode] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     setSearchQuery(searchParams.get('q') ?? '');
     setSelectedSpeciality(searchParams.get('speciality') ?? '');
+    const rawRecommended = searchParams.get('specialities') ?? '';
+    const parsedRecommended = rawRecommended
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    setRecommendedSpecialities(parsedRecommended);
     setSelectedConsultationMode(searchParams.get('consultationMode') ?? '');
   }, [searchParams]);
 
   const filteredDoctors = mockDoctors.filter((doc) => {
     if (!doc.available) return false;
     if (selectedSpeciality && doc.speciality !== selectedSpeciality) return false;
+    if (!selectedSpeciality && recommendedSpecialities.length > 0 && !recommendedSpecialities.includes(doc.speciality)) return false;
     if (selectedConsultationMode === 'telemedicine' && doc.consultationMode !== 'both') return false;
     if (selectedConsultationMode === 'in_person_only' && doc.consultationMode !== 'in_person_only') return false;
     if (searchQuery) {
@@ -37,6 +45,11 @@ export default function DoctorsList() {
       <div>
         <h2 className="text-3xl font-bold text-gray-900">Find a Doctor</h2>
         <p className="text-gray-500 text-lg mt-1">Book an appointment with top specialists</p>
+        {recommendedSpecialities.length > 0 && !selectedSpeciality && (
+          <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-800">
+            Showing doctors relevant to your symptom check: {recommendedSpecialities.join(', ')}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">

@@ -32,6 +32,7 @@ import MyAppointments from './pages/MyAppointments';
 import TelemedicineSession from './pages/TelemedicineSession';
 import PaymentPage from './pages/PaymentPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import SymptomCheckerPage from './pages/SymptomCheckerPage';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -585,6 +586,11 @@ function AppContent() {
               <Link to="/dashboard" className={cn("flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-sm font-bold transition-all", location.pathname === '/dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50')}>
                 <Activity size={18} /> <span className="hidden sm:inline">Dashboard</span>
               </Link>
+              {effectiveRole === 'patient' && (
+                <Link to="/symptom-checker" className={cn("flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-sm font-bold transition-all", location.pathname === '/symptom-checker' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50')}>
+                  <Stethoscope size={18} /> <span className="hidden sm:inline">Symptom Checker</span>
+                </Link>
+              )}
               <div className="w-px h-6 bg-slate-200 mx-1 md:mx-2 hidden sm:block"></div>
               <button
                 type="button"
@@ -1873,6 +1879,21 @@ function AppContent() {
               isSignedIn ? (
                 effectiveRole === 'patient' ? (
                   <PaymentSuccessPage />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <Navigate to="/signin" replace />
+              )
+            }
+          />
+
+          <Route
+            path="/symptom-checker"
+            element={
+              isSignedIn ? (
+                effectiveRole === 'patient' ? (
+                  <SymptomCheckerPage patient={patient} clerkUserId={user?.id} />
                 ) : (
                   <Navigate to="/dashboard" replace />
                 )
