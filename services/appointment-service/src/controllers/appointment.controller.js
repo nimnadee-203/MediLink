@@ -130,6 +130,55 @@ export const createAppointment = async (req, res) => {
       notes: payload.notes || ""
     });
 
+    // Trigger notification
+    const { atoken } = req.headers;
+    const authHeader = req.headers.authorization;
+    
+    // Attempt to notify in background
+    (async () => {
+      try {
+        // Fetch doctor name
+        const doctorRes = await axios.post('http://localhost:4000/api/admin/all-doctors', {}, { 
+          headers: { atoken } 
+        }).catch(() => ({ data: { success: false } }));
+        
+        const doctor = doctorRes.data?.doctors?.find(d => d._id.toString() === payload.doctorId.toString());
+        const doctorName = doctor ? doctor.name : "your doctor";
+
+        // Get patient details from req.user or fetch if not available
+        let patientEmail = req.user?.email;
+        let patientName = req.user?.name;
+
+        if (!patientEmail) {
+            const patientsRes = await axios.get('http://localhost:8002/api/patients/admin/users', { 
+                headers: { atoken, authorization: authHeader } 
+            }).catch(() => ({ data: { success: false } }));
+            
+            const patient = patientsRes.data?.users?.find(p => (p.id || p._id).toString() === payload.patientId.toString());
+            if (patient) {
+                patientEmail = patient.email;
+                patientName = patient.name;
+            }
+        }
+
+        if (patientEmail) {
+          await axios.post('http://localhost:8006/api/notifications/send-email', {
+            type: 'appointment_booked',
+            recipientEmail: patientEmail,
+            details: {
+              patientName: patientName || "Patient",
+              doctorName: doctorName,
+              slotDate: payload.slotDate,
+              slotTime: payload.slotTime,
+              reason: payload.reason
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Delayed notification failed:", err.message);
+      }
+    })();
+
     return res.status(201).json({
       message: "Appointment booked successfully",
       appointment: sanitizeAppointment(appointment)
@@ -348,6 +397,39 @@ export const cancelAppointment = async (req, res) => {
     }
 
     await appointment.save();
+
+    // Trigger notification
+    const { atoken } = req.headers;
+    const authHeader = req.headers.authorization;
+
+    (async () => {
+      try {
+        // Fetch doctor and patient info
+        const [doctorsRes, patientsRes] = await Promise.all([
+          axios.post('http://localhost:4000/api/admin/all-doctors', {}, { headers: { atoken } }).catch(() => ({ data: { success: false } })),
+          axios.get('http://localhost:8002/api/patients/admin/users', { headers: { atoken, authorization: authHeader } }).catch(() => ({ data: { success: false } }))
+        ]);
+
+        const doctor = doctorsRes.data?.doctors?.find(d => d._id.toString() === appointment.doctorId.toString());
+        const patient = patientsRes.data?.users?.find(p => (p.id || p._id).toString() === appointment.patientId.toString());
+
+        if (patient && patient.email) {
+          await axios.post('http://localhost:8006/api/notifications/send-email', {
+            type: 'appointment_cancelled',
+            recipientEmail: patient.email,
+            details: {
+              patientName: patient.name,
+              doctorName: doctor ? doctor.name : "your doctor",
+              slotDate: appointment.slotDate,
+              slotTime: appointment.slotTime,
+              cancellationReason: req.body.notes || "Not specified"
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Cancellation notification failed:", err.message);
+      }
+    })();
 
     return res.json({
       message: "Appointment cancelled successfully",
