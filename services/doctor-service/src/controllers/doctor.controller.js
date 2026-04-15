@@ -2,6 +2,7 @@ import doctorModel from "../models/Doctor.js";
 import appointmentReadModel from "../models/AppointmentRead.js";
 import mongoose from "mongoose";
 import patientLookupModel from "../models/PatientLookup.js";
+import { sendNotificationToUser } from "../lib/notificationClient.js";
 
 const doctorProjection =
 	"name image speciality degree experience about consultationMode available fees address slots_booked status";
@@ -207,6 +208,10 @@ export const approveDoctorAppointment = async (req, res) => {
 			return res.json({ success: false, message: `Cannot approve an appointment with status "${appointment.status}"` });
 		}
 
+		if (appointment.status === "confirmed") {
+			return res.json({ success: false, message: "Appointment is already confirmed" });
+		}
+
 		// updateOne avoids full-document save() issues (e.g. legacy / mixed shapes in appointment-db).
 		const result = await appointmentReadModel.updateOne(
 			{ _id: appointmentId },
@@ -216,6 +221,19 @@ export const approveDoctorAppointment = async (req, res) => {
 		if (result.matchedCount === 0) {
 			return res.json({ success: false, message: "Appointment not found" });
 		}
+
+		const doctor = await doctorModel.findById(req.doctorId).select("name").lean();
+		const rawName = (doctor?.name || "").replace(/^dr\.?\s+/i, "").trim();
+		const doctorLabel = rawName ? `Dr. ${rawName}` : "Your clinician";
+
+		await sendNotificationToUser({
+			recipientId: appointment.patientId,
+			recipientRole: "patient",
+			type: "appointment_confirmed",
+			title: "Appointment confirmed",
+			body: `Your visit on ${appointment.slotDate} at ${appointment.slotTime} was confirmed by ${doctorLabel}.`,
+			appointmentId
+		});
 
 		return res.json({ success: true, message: "Appointment approved", status: "confirmed" });
 	} catch (error) {
@@ -256,13 +274,19 @@ export const cancelDoctorAppointment = async (req, res) => {
 			return res.json({ success: false, message: "Appointment not found" });
 		}
 
+		await sendNotificationToUser({
+			recipientId: appointment.patientId,
+			recipientRole: "patient",
+			type: "appointment_cancelled_clinic",
+			title: "Appointment cancelled",
+			body: `Your visit on ${appointment.slotDate} at ${appointment.slotTime} was cancelled by the clinic.`,
+			appointmentId
+		});
+
 		return res.json({ success: true, message: "Appointment cancelled", status: "cancelled" });
 	} catch (error) {
 		console.log(error);
 		return res.json({ success: false, message: error.message });
 	}
 };
-
-
-
 

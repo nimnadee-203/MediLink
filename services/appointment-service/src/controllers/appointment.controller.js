@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
 import axios from "axios";
+import { sendNotificationToUser } from "../lib/notificationClient.js";
 
 const editableStatuses = new Set(["pending", "confirmed"]);
 const validStatuses = new Set(["pending", "confirmed", "cancelled", "completed"]);
@@ -465,6 +466,18 @@ export const cancelAppointment = async (req, res) => {
     }
 
     await appointment.save();
+
+    const cancelledBy = req.body.cancelledBy || "system";
+    if (String(cancelledBy) === "patient") {
+      await sendNotificationToUser({
+        recipientId: appointment.doctorId,
+        recipientRole: "doctor",
+        type: "appointment_cancelled_by_patient",
+        title: "Patient cancelled an appointment",
+        body: `A patient cancelled a visit scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
+        appointmentId: appointment._id
+      });
+    }
 
     return res.json({
       message: "Appointment cancelled successfully",

@@ -94,11 +94,11 @@ const createServiceProxy = (target) =>
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
+  // Single line — duplicate Access-Control-Allow-Headers overwrite each other and previously dropped dtoken (doctor dashboard).
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, Dtoken, Atoken, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, dtoken, Dtoken, atoken, Atoken, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone'
   );
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, atoken, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
