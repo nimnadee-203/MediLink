@@ -1,11 +1,31 @@
 import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
+import { sendNotificationEmail } from "../services/notificationEmailService.js";
 
 const isValidObjectId = (v) => mongoose.Types.ObjectId.isValid(String(v));
 
+/**
+ * Fetch appointment details from appointment service
+ */
+async function fetchAppointmentDetails(appointmentId) {
+  try {
+    const response = await fetch(`http://localhost:8003/api/appointments/${appointmentId}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return data.appointment;
+    }
+  } catch (error) {
+    console.error(`[notification-service] Failed to fetch appointment ${appointmentId}:`, error.message);
+  }
+  return null;
+}
+
 export const createNotification = async (req, res) => {
   try {
-    const { recipientId, recipientRole, type, title, body, appointmentId } = req.body;
+    const { recipientId, recipientRole, type, title, body, appointmentId, appointmentDetails } = req.body;
 
     if (!recipientId || !recipientRole || !title) {
       return res.status(400).json({
@@ -35,6 +55,28 @@ export const createNotification = async (req, res) => {
       appointmentId: appointmentId ? new mongoose.Types.ObjectId(String(appointmentId)) : undefined,
       read: false
     });
+
+    // Send email notification asynchronously (don't wait for it)
+    if (type && type.includes("appointment")) {
+      let appointmentData = appointmentDetails;
+      
+      if (!appointmentData && appointmentId) {
+        appointmentData = await fetchAppointmentDetails(appointmentId);
+      }
+
+      if (appointmentData) {
+        sendNotificationEmail(
+          {
+            recipientId,
+            recipientRole,
+            type
+          },
+          appointmentData
+        ).catch((err) => {
+          console.error("[notification-service] Email send failed (non-blocking):", err.message);
+        });
+      }
+    }
 
     return res.status(201).json({
       success: true,
