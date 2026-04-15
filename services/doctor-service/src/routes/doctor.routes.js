@@ -5,6 +5,7 @@ import {
   cancelDoctorAppointment,
   getDoctorAppointmentDetails,
   getDoctorById,
+  getDoctorEmail,
   getDoctorUpcomingAppointments,
   listDoctors
 } from '../controllers/doctor.controller.js'
@@ -21,6 +22,7 @@ doctorRouter.patch('/appointments/:appointmentId/approve', authDoctor, approveDo
 doctorRouter.patch('/appointments/:appointmentId/cancel', authDoctor, cancelDoctorAppointment)
 doctorRouter.get('/notifications', authDoctor, getDoctorNotifications)
 doctorRouter.patch('/notifications/:notificationId/read', authDoctor, markDoctorNotificationRead)
+doctorRouter.get('/emails/:doctorId', getDoctorEmail)
 doctorRouter.get('/:doctorId', getDoctorById)
 
 export default doctorRouter

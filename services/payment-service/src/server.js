@@ -4,7 +4,13 @@ import { connectDB } from './config/db.js';
 import paymentRoutes from './routes/payment.routes.js';
 import { handleStripeWebhook } from './controllers/webhook.controller.js';
 
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const port = Number(process.env.PORT) || 8019;

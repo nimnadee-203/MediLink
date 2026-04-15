@@ -198,55 +198,6 @@ export const createAppointment = async (req, res) => {
       }
     });
 
-    // Trigger notification
-    const { atoken } = req.headers;
-    const authHeader = req.headers.authorization;
-
-    // Attempt to notify in background
-    (async () => {
-      try {
-        // Fetch doctor name
-        const doctorRes = await axios.post('http://localhost:4000/api/admin/all-doctors', {}, {
-          headers: { atoken }
-        }).catch(() => ({ data: { success: false } }));
-
-        const doctor = doctorRes.data?.doctors?.find(d => d._id.toString() === payload.doctorId.toString());
-        const doctorName = doctor ? doctor.name : "your doctor";
-
-        // Get patient details from req.user or fetch if not available
-        let patientEmail = req.user?.email;
-        let patientName = req.user?.name;
-
-        if (!patientEmail) {
-          const patientsRes = await axios.get('http://localhost:8002/api/patients/admin/users', {
-            headers: { atoken, authorization: authHeader }
-          }).catch(() => ({ data: { success: false } }));
-
-          const patient = patientsRes.data?.users?.find(p => (p.id || p._id).toString() === payload.patientId.toString());
-          if (patient) {
-            patientEmail = patient.email;
-            patientName = patient.name;
-          }
-        }
-
-        if (patientEmail) {
-          await axios.post('http://localhost:8006/api/notifications/send-email', {
-            type: 'appointment_booked',
-            recipientEmail: patientEmail,
-            details: {
-              patientName: patientName || "Patient",
-              doctorName: doctorName,
-              slotDate: payload.slotDate,
-              slotTime: payload.slotTime,
-              reason: payload.reason
-            }
-          });
-        }
-      } catch (err) {
-        console.error("Delayed notification failed:", err.message);
-      }
-    })();
-
     return res.status(201).json({
       message: "Appointment booked successfully",
       appointment: appointmentDetails
@@ -452,6 +403,36 @@ export const updateAppointment = async (req, res) => {
     if (updates.status === "cancelled") {
       appointment.cancelledAt = new Date();
       appointment.cancelledBy = req.body.cancelledBy || "system";
+
+      // Notify patient and doctor about cancellation
+      const notifyCancellation = async () => {
+        try {
+          // Notify patient
+          await sendNotificationToUser({
+            recipientId: appointment.patientId,
+            recipientRole: "patient",
+            type: "appointment_cancelled_by_doctor",
+            title: "Appointment Cancelled",
+            body: `Your appointment with Dr. ${req.body.doctorName || "your doctor"} on ${appointment.slotDate} at ${appointment.slotTime} has been cancelled.`,
+            appointmentId: appointment._id,
+            appointmentDetails: sanitizeAppointment(appointment)
+          });
+
+          // Notify doctor
+          await sendNotificationToUser({
+            recipientId: appointment.doctorId,
+            recipientRole: "doctor",
+            type: "appointment_cancelled_by_doctor",
+            title: "Appointment Cancelled",
+            body: `The appointment for ${appointment.slotDate} at ${appointment.slotTime} has been cancelled.`,
+            appointmentId: appointment._id,
+            appointmentDetails: sanitizeAppointment(appointment)
+          });
+        } catch (error) {
+          console.error("Failed to send cancellation notifications:", error.message);
+        }
+      };
+      notifyCancellation();
     }
 
     await appointment.save();
@@ -554,6 +535,38 @@ export const cancelAppointment = async (req, res) => {
     }
 
     await appointment.save();
+
+    // Send notifications to both patient and doctor
+    const notifyCancellation = async () => {
+      try {
+        const type = appointment.cancelledBy === "patient" ? "appointment_cancelled_by_patient" : "appointment_cancelled_by_doctor";
+        
+        // Notify patient
+        await sendNotificationToUser({
+          recipientId: appointment.patientId,
+          recipientRole: "patient",
+          type: type,
+          title: "Appointment Cancelled",
+          body: `Your appointment on ${appointment.slotDate} at ${appointment.slotTime} has been cancelled.`,
+          appointmentId: appointment._id,
+          appointmentDetails: sanitizeAppointment(appointment)
+        });
+
+        // Notify doctor
+        await sendNotificationToUser({
+          recipientId: appointment.doctorId,
+          recipientRole: "doctor",
+          type: type,
+          title: "Appointment Cancelled",
+          body: `The appointment for ${appointment.slotDate} at ${appointment.slotTime} has been cancelled.`,
+          appointmentId: appointment._id,
+          appointmentDetails: sanitizeAppointment(appointment)
+        });
+      } catch (error) {
+        console.error("Failed to send cancellation notifications:", error.message);
+      }
+    };
+    notifyCancellation();
 
     return res.json({
       message: "Appointment cancelled successfully",

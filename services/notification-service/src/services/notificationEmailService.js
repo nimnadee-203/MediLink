@@ -17,7 +17,7 @@ async function getUserEmail(userId, userType) {
         return data.email;
       }
     } else if (userType === "doctor") {
-      const response = await fetch(`http://localhost:4001/api/doctors/emails/${userId}`, {
+      const response = await fetch(`http://localhost:4000/api/doctor/emails/${userId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
@@ -48,13 +48,14 @@ async function getUserName(userId, userType) {
         return data.name;
       }
     } else if (userType === "doctor") {
-      const response = await fetch(`http://localhost:4001/api/doctors/${userId}`, {
+      const response = await fetch(`http://localhost:4000/api/doctor/${userId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
       if (response.ok) {
         const data = await response.json();
-        return data.name;
+        // The doctor service returns { success: true, doctor: { ... } }
+        return data.doctor?.name || "Doctor";
       }
     }
   } catch (error) {

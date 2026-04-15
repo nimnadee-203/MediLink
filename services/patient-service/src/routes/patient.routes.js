@@ -333,31 +333,6 @@ router.put('/profile', authMiddleware, async (req, res) => {
   }
 });
 
-// Public doctor directory backed by patient-service test DB users (role=doctor)
-router.get('/doctors/public', async (_req, res) => {
-  try {
-    const doctors = await Patient.find({ role: 'doctor' }).sort({ createdAt: -1 });
-    return res.json({ doctors: doctors.map(toPublicDoctor) });
-  } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch doctors', error: error.message });
-  }
-});
-
-router.get('/doctors/public/:doctorId', async (req, res) => {
-  try {
-    const { doctorId } = req.params;
-    const doctor = await Patient.findOne({ _id: doctorId, role: 'doctor' });
-
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
-
-    return res.json({ doctor: toPublicDoctor(doctor) });
-  } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch doctor', error: error.message });
-  }
-});
-
 router.get('/admin/users', authMiddleware, requireAdmin, async (_req, res) => {
   try {
     const users = await Patient.find({}).sort({ createdAt: -1 });
@@ -694,6 +669,31 @@ router.patch('/notifications/:notificationId/read', authMiddleware, async (req, 
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to update notification' });
+  }
+});
+
+// Internal lookup for notification service
+router.get('/emails/:id', async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id).select('email');
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    res.json({ email: patient.email });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id).select('name email');
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    res.json(patient);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

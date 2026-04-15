@@ -3,12 +3,7 @@ const DOCTOR_SOURCES = [
     type: 'doctor-service',
     baseUrl: import.meta.env.VITE_DOCTOR_API_BASE_URL || 'http://localhost:8000/api/doctor'
   },
-  { type: 'doctor-service', baseUrl: 'http://localhost:4000/api/doctor' },
-  {
-    type: 'patients',
-    baseUrl: import.meta.env.VITE_PATIENT_DOCTOR_API_BASE_URL || 'http://localhost:8000/api/patients'
-  },
-  { type: 'patients', baseUrl: 'http://localhost:8002/api/patients' }
+  { type: 'doctor-service', baseUrl: 'http://localhost:4000/api/doctor' }
 ].filter((item) => Boolean(item.baseUrl));
 
 const DEFAULT_DOCTOR_IMAGE =
@@ -72,10 +67,6 @@ function normalizeDoctor(raw) {
 }
 
 function buildPath(sourceType, kind, doctorId) {
-  if (sourceType === 'patients') {
-    return kind === 'list' ? '/doctors/public' : `/doctors/public/${encodeURIComponent(doctorId)}`;
-  }
-
   return kind === 'list' ? '/list' : `/${encodeURIComponent(doctorId)}`;
 }
 

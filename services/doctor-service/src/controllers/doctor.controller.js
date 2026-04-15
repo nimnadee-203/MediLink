@@ -5,7 +5,7 @@ import patientLookupModel from "../models/PatientLookup.js";
 import { sendNotificationToUser } from "../lib/notificationClient.js";
 
 const doctorProjection =
-	"name image speciality degree experience about consultationMode available fees address slots_booked status";
+	"name email image speciality degree experience about consultationMode available fees address slots_booked status";
 
 const reportIdKey = (value) => {
 	if (value == null || value === "") return "";
@@ -28,6 +28,7 @@ const normalizeDoctor = (doctor) => ({
 	available: typeof doctor.available === "boolean" ? doctor.available : true,
 	fees: Number.isFinite(Number(doctor.fees)) ? Number(doctor.fees) : 0,
 	address: doctor.address || "",
+	email: doctor.email || "",
 	slots_booked: doctor.slots_booked || {},
 	status: doctor.status || "approved"
 });
@@ -287,6 +288,21 @@ export const cancelDoctorAppointment = async (req, res) => {
 	} catch (error) {
 		console.log(error);
 		return res.json({ success: false, message: error.message });
+	}
+};
+
+export const getDoctorEmail = async (req, res) => {
+	try {
+		const { doctorId } = req.params;
+		const doctor = await doctorModel.findById(doctorId).select("email").lean();
+
+		if (!doctor) {
+			return res.status(404).json({ success: false, message: "Doctor not found" });
+		}
+
+		return res.json({ success: true, email: doctor.email });
+	} catch (error) {
+		return res.status(500).json({ success: false, message: error.message });
 	}
 };
 
