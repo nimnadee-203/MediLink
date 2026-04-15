@@ -6,6 +6,10 @@ import { fileURLToPath } from 'url';
 import { createClerkClient } from '@clerk/backend';
 import Patient from '../models/Patient.js';
 import { authMiddleware } from '../middleware/auth.js';
+import {
+  listNotificationsForRecipient,
+  markNotificationReadInternal
+} from '../lib/notificationClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -166,6 +170,27 @@ const sanitizePatient = (patient) => ({
   updatedAt: patient.updatedAt
 });
 
+const toPublicDoctor = (user) => {
+  const name = user.name || user.username || 'Doctor';
+  const avatarName = encodeURIComponent(name);
+  const image = user.image || `https://ui-avatars.com/api/?name=${avatarName}&background=1d4ed8&color=fff&size=200&bold=true`;
+
+  return {
+    _id: String(user._id),
+    name,
+    speciality: user.speciality || 'General Physician',
+    degree: user.degree || 'MBBS',
+    experience: user.experience || '1 Year',
+    fees: Number.isFinite(Number(user.fees)) ? Number(user.fees) : 1500,
+    available: typeof user.available === 'boolean' ? user.available : true,
+    consultationMode: user.consultationMode === 'both' ? 'both' : 'in_person_only',
+    image,
+    about: user.about || 'Experienced clinician.',
+    address: user.address || 'Sri Lanka',
+    slots_booked: user.slots_booked || {}
+  };
+};
+
 const getProfileHints = (req) => ({
   email: req.headers['x-clerk-email'] || '',
   name: req.headers['x-clerk-name'] || '',
@@ -305,6 +330,31 @@ router.put('/profile', authMiddleware, async (req, res) => {
     return res.json({ message: 'Profile updated successfully', patient: sanitizePatient(patient) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
+});
+
+// Public doctor directory backed by patient-service test DB users (role=doctor)
+router.get('/doctors/public', async (_req, res) => {
+  try {
+    const doctors = await Patient.find({ role: 'doctor' }).sort({ createdAt: -1 });
+    return res.json({ doctors: doctors.map(toPublicDoctor) });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to fetch doctors', error: error.message });
+  }
+});
+
+router.get('/doctors/public/:doctorId', async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const doctor = await Patient.findOne({ _id: doctorId, role: 'doctor' });
+
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+
+    return res.json({ doctor: toPublicDoctor(doctor) });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to fetch doctor', error: error.message });
   }
 });
 
@@ -616,6 +666,34 @@ router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Failed to delete report:', error);
     return res.status(500).json({ message: 'Failed to delete report', error: error.message });
+  }
+});
+
+router.get('/notifications', authMiddleware, async (req, res) => {
+  try {
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+    const data = await listNotificationsForRecipient(patient._id, 'patient');
+    return res.json(data);
+  } catch (error) {
+    console.error('[patient] notifications list', error.message);
+    return res.json({ success: true, unreadCount: 0, notifications: [] });
+  }
+});
+
+router.patch('/notifications/:notificationId/read', authMiddleware, async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+    await markNotificationReadInternal(notificationId, patient._id, 'patient');
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to update notification' });
   }
 });
 

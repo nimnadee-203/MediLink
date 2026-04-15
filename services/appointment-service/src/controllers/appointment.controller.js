@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
 import Appointment from "../models/Appointment.js";
 import axios from "axios";
+import { sendNotificationToUser } from "../lib/notificationClient.js";
 
 const editableStatuses = new Set(["pending", "confirmed"]);
 const validStatuses = new Set(["pending", "confirmed", "cancelled", "completed"]);
 const validPaymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
+const validVisitModes = new Set(["in_person", "telemedicine"]);
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
@@ -17,6 +19,8 @@ const sanitizeAppointment = (appointment) => ({
   amount: appointment.amount,
   reason: appointment.reason,
   notes: appointment.notes,
+  visitMode: appointment.visitMode,
+  reportIds: (appointment.reportIds || []).map((id) => String(id)),
   status: appointment.status,
   paymentStatus: appointment.paymentStatus,
   cancelledAt: appointment.cancelledAt,
@@ -34,6 +38,8 @@ const parseBookingPayload = (body) => {
     amount,
     reason,
     notes,
+    visitMode,
+    reportIds,
     status,
     paymentStatus
   } = body;
@@ -46,6 +52,8 @@ const parseBookingPayload = (body) => {
     amount,
     reason,
     notes,
+    visitMode,
+    reportIds,
     status,
     paymentStatus
   };
@@ -77,6 +85,23 @@ const ensureBookingPayload = (payload) => {
 
   if (payload.paymentStatus && !validPaymentStatuses.has(payload.paymentStatus)) {
     return "paymentStatus is invalid";
+  }
+
+  if (payload.visitMode && !validVisitModes.has(payload.visitMode)) {
+    return "visitMode is invalid";
+  }
+
+  const reportIds = Array.isArray(payload.reportIds) ? payload.reportIds : [];
+  if (payload.reportIds !== undefined && payload.reportIds !== null && !Array.isArray(payload.reportIds)) {
+    return "reportIds must be an array";
+  }
+  if (reportIds.length > 50) {
+    return "Too many reports selected";
+  }
+  for (const id of reportIds) {
+    if (!isValidObjectId(String(id))) {
+      return "Each report id must be a valid MongoDB ObjectId";
+    }
   }
 
   return null;
@@ -124,10 +149,53 @@ export const createAppointment = async (req, res) => {
       return res.status(409).json({ message: conflictMessage });
     }
 
+    const reportIds = Array.isArray(payload.reportIds) ? payload.reportIds : [];
+
     const appointment = await Appointment.create({
       ...payload,
       reason: payload.reason || "",
-      notes: payload.notes || ""
+      notes: payload.notes || "",
+      visitMode: payload.visitMode === "telemedicine" ? "telemedicine" : "in_person",
+      reportIds
+    });
+
+    // Send notifications to both patient and doctor
+    const appointmentDetails = sanitizeAppointment(appointment);
+
+    // Notify patient
+    await sendNotificationToUser({
+      recipientId: appointment.patientId,
+      recipientRole: "patient",
+      type: "appointment_booked",
+      title: "Appointment Confirmed",
+      body: `Your appointment is confirmed for ${appointment.slotDate} at ${appointment.slotTime}.`,
+      appointmentId: appointment._id,
+      appointmentDetails: {
+        patientId: appointment.patientId,
+        doctorId: appointment.doctorId,
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
+        visitMode: appointment.visitMode,
+        reason: appointment.reason
+      }
+    });
+
+    // Notify doctor
+    await sendNotificationToUser({
+      recipientId: appointment.doctorId,
+      recipientRole: "doctor",
+      type: "appointment_booked",
+      title: "New Appointment Scheduled",
+      body: `A new appointment has been scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
+      appointmentId: appointment._id,
+      appointmentDetails: {
+        patientId: appointment.patientId,
+        doctorId: appointment.doctorId,
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
+        visitMode: appointment.visitMode,
+        reason: appointment.reason
+      }
     });
 
     // Trigger notification
@@ -181,7 +249,7 @@ export const createAppointment = async (req, res) => {
 
     return res.status(201).json({
       message: "Appointment booked successfully",
-      appointment: sanitizeAppointment(appointment)
+      appointment: appointmentDetails
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to create appointment", error: error.message });
@@ -308,7 +376,17 @@ export const updateAppointment = async (req, res) => {
       });
     }
 
-    const allowedUpdates = ["slotDate", "slotTime", "amount", "reason", "notes", "status", "paymentStatus"];
+    const allowedUpdates = [
+      "slotDate",
+      "slotTime",
+      "amount",
+      "reason",
+      "notes",
+      "visitMode",
+      "reportIds",
+      "status",
+      "paymentStatus"
+    ];
     const updates = {};
 
     for (const field of allowedUpdates) {
@@ -331,6 +409,24 @@ export const updateAppointment = async (req, res) => {
 
     if (updates.paymentStatus !== undefined && !validPaymentStatuses.has(updates.paymentStatus)) {
       return res.status(400).json({ message: "paymentStatus is invalid" });
+    }
+
+    if (updates.visitMode !== undefined && !validVisitModes.has(updates.visitMode)) {
+      return res.status(400).json({ message: "visitMode is invalid" });
+    }
+
+    if (updates.reportIds !== undefined) {
+      if (!Array.isArray(updates.reportIds)) {
+        return res.status(400).json({ message: "reportIds must be an array" });
+      }
+      if (updates.reportIds.length > 50) {
+        return res.status(400).json({ message: "Too many reports selected" });
+      }
+      for (const id of updates.reportIds) {
+        if (!isValidObjectId(String(id))) {
+          return res.status(400).json({ message: "Each report id must be a valid MongoDB ObjectId" });
+        }
+      }
     }
 
     const nextSlotDate = updates.slotDate || appointment.slotDate;
@@ -369,6 +465,67 @@ export const updateAppointment = async (req, res) => {
   }
 };
 
+export const updatePatientAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid appointment id" });
+    }
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (req.body.patientId === undefined || req.body.patientId === null || req.body.patientId === "") {
+      return res.status(400).json({ message: "patientId is required" });
+    }
+    if (String(appointment.patientId) !== String(req.body.patientId)) {
+      return res.status(403).json({ message: "You can only update your own appointments" });
+    }
+
+    if (!editableStatuses.has(appointment.status)) {
+      return res.status(409).json({
+        message: `Appointments with status "${appointment.status}" cannot be updated`
+      });
+    }
+
+    // Patient-scoped update: only reason and shared report ids are editable.
+    const updates = {};
+    if (req.body.reason !== undefined) {
+      updates.reason = String(req.body.reason);
+    }
+    if (req.body.reportIds !== undefined) {
+      if (!Array.isArray(req.body.reportIds)) {
+        return res.status(400).json({ message: "reportIds must be an array" });
+      }
+      if (req.body.reportIds.length > 50) {
+        return res.status(400).json({ message: "Too many reports selected" });
+      }
+      for (const reportId of req.body.reportIds) {
+        if (!isValidObjectId(String(reportId))) {
+          return res.status(400).json({ message: "Each report id must be a valid MongoDB ObjectId" });
+        }
+      }
+      updates.reportIds = req.body.reportIds;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No valid fields provided. Only reason and reportIds are allowed." });
+    }
+
+    Object.assign(appointment, updates);
+    await appointment.save();
+
+    return res.json({
+      message: "Appointment details updated successfully",
+      appointment: sanitizeAppointment(appointment)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to update appointment details", error: error.message });
+  }
+};
+
 export const cancelAppointment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -398,7 +555,43 @@ export const cancelAppointment = async (req, res) => {
 
     await appointment.save();
 
-    // Trigger notification
+    // Send in-app notifications
+    const cancelledBy = req.body.cancelledBy || "system";
+    if (String(cancelledBy) === "patient") {
+      await sendNotificationToUser({
+        recipientId: appointment.doctorId,
+        recipientRole: "doctor",
+        type: "appointment_cancelled_by_patient",
+        title: "Patient cancelled an appointment",
+        body: `A patient cancelled a visit scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
+        appointmentId: appointment._id,
+        appointmentDetails: {
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          visitMode: appointment.visitMode
+        }
+      });
+    } else if (String(cancelledBy) === "doctor") {
+      await sendNotificationToUser({
+        recipientId: appointment.patientId,
+        recipientRole: "patient",
+        type: "appointment_cancelled_by_doctor",
+        title: "Doctor cancelled an appointment",
+        body: `Your appointment with the doctor scheduled for ${appointment.slotDate} at ${appointment.slotTime} has been cancelled.`,
+        appointmentId: appointment._id,
+        appointmentDetails: {
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          visitMode: appointment.visitMode
+        }
+      });
+    }
+
+    // Send email notification in background
     const { atoken } = req.headers;
     const authHeader = req.headers.authorization;
 
