@@ -19,6 +19,9 @@ function buildPayload(payload) {
   if (payload.appointmentId) {
     body.appointmentId = String(payload.appointmentId);
   }
+  if (payload.appointmentDetails) {
+    body.appointmentDetails = payload.appointmentDetails;
+  }
   return body;
 }
 
@@ -41,3 +44,4 @@ export async function sendNotificationToUser(payload) {
     console.error(`[appointment-service] notification POST ${url}${hint}`, e.message);
   }
 }
+

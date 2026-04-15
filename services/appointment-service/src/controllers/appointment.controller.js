@@ -159,9 +159,48 @@ export const createAppointment = async (req, res) => {
       reportIds
     });
 
+    // Send notifications to both patient and doctor
+    const appointmentDetails = sanitizeAppointment(appointment);
+
+    // Notify patient
+    await sendNotificationToUser({
+      recipientId: appointment.patientId,
+      recipientRole: "patient",
+      type: "appointment_booked",
+      title: "Appointment Confirmed",
+      body: `Your appointment is confirmed for ${appointment.slotDate} at ${appointment.slotTime}.`,
+      appointmentId: appointment._id,
+      appointmentDetails: {
+        patientId: appointment.patientId,
+        doctorId: appointment.doctorId,
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
+        visitMode: appointment.visitMode,
+        reason: appointment.reason
+      }
+    });
+
+    // Notify doctor
+    await sendNotificationToUser({
+      recipientId: appointment.doctorId,
+      recipientRole: "doctor",
+      type: "appointment_booked",
+      title: "New Appointment Scheduled",
+      body: `A new appointment has been scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
+      appointmentId: appointment._id,
+      appointmentDetails: {
+        patientId: appointment.patientId,
+        doctorId: appointment.doctorId,
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
+        visitMode: appointment.visitMode,
+        reason: appointment.reason
+      }
+    });
+
     return res.status(201).json({
       message: "Appointment booked successfully",
-      appointment: sanitizeAppointment(appointment)
+      appointment: appointmentDetails
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to create appointment", error: error.message });
@@ -475,7 +514,30 @@ export const cancelAppointment = async (req, res) => {
         type: "appointment_cancelled_by_patient",
         title: "Patient cancelled an appointment",
         body: `A patient cancelled a visit scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
-        appointmentId: appointment._id
+        appointmentId: appointment._id,
+        appointmentDetails: {
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          visitMode: appointment.visitMode
+        }
+      });
+    } else if (String(cancelledBy) === "doctor") {
+      await sendNotificationToUser({
+        recipientId: appointment.patientId,
+        recipientRole: "patient",
+        type: "appointment_cancelled_by_doctor",
+        title: "Doctor cancelled an appointment",
+        body: `Your appointment with the doctor scheduled for ${appointment.slotDate} at ${appointment.slotTime} has been cancelled.`,
+        appointmentId: appointment._id,
+        appointmentDetails: {
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          visitMode: appointment.visitMode
+        }
       });
     }
 
