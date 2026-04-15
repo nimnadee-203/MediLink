@@ -6,6 +6,10 @@ import { fileURLToPath } from 'url';
 import { createClerkClient } from '@clerk/backend';
 import Patient from '../models/Patient.js';
 import { authMiddleware } from '../middleware/auth.js';
+import {
+  listNotificationsForRecipient,
+  markNotificationReadInternal
+} from '../lib/notificationClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -662,6 +666,34 @@ router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Failed to delete report:', error);
     return res.status(500).json({ message: 'Failed to delete report', error: error.message });
+  }
+});
+
+router.get('/notifications', authMiddleware, async (req, res) => {
+  try {
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+    const data = await listNotificationsForRecipient(patient._id, 'patient');
+    return res.json(data);
+  } catch (error) {
+    console.error('[patient] notifications list', error.message);
+    return res.json({ success: true, unreadCount: 0, notifications: [] });
+  }
+});
+
+router.patch('/notifications/:notificationId/read', authMiddleware, async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+    await markNotificationReadInternal(notificationId, patient._id, 'patient');
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to update notification' });
   }
 });
 

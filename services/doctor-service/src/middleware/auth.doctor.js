@@ -12,7 +12,7 @@ export const authDoctor = async (req, res, next) => {
       return res.json({ success: false, message: 'Invalid doctor token' });
     }
 
-    req.doctorId = tokenDecode.id;
+    req.doctorId = String(tokenDecode.id);
     next();
   } catch (error) {
     console.log(error);

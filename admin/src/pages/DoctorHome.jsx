@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { AdminContext } from '../context/AdminContext';
+import DoctorNotificationBell from '../components/DoctorNotificationBell';
 
 const JITSI_SCRIPT_URL = 'https://meet.jit.si/external_api.js';
 
@@ -28,6 +29,14 @@ function loadJitsiScript() {
     script.onerror = () => reject(new Error('Failed to load Jitsi script'));
     document.body.appendChild(script);
   });
+}
+
+function formatDoctorDisplayName(name, fallback = 'Doctor') {
+  const baseName = typeof name === 'string' && name.trim() ? name.trim() : fallback;
+  if (/^dr\.?\s+/i.test(baseName)) {
+    return baseName.replace(/^dr\.?\s+/i, 'Dr. ');
+  }
+  return `Dr. ${baseName}`;
 }
 
 const DoctorHome = () => {
@@ -240,7 +249,7 @@ const DoctorHome = () => {
         width: '100%',
         height: 560,
         userInfo: {
-          displayName: doctor?.name ? `Dr. ${doctor.name}` : 'Doctor'
+          displayName: doctor?.name ? formatDoctorDisplayName(doctor.name) : 'Doctor'
         },
         configOverwrite: {
           prejoinPageEnabled: true,
@@ -323,7 +332,10 @@ const DoctorHome = () => {
           <h2 className="page-title">Doctor Dashboard</h2>
           <p className="doctor-dashboard-subtitle">Your clinical day at a glance, with quick access to schedule insights.</p>
         </div>
-        <div className="doctor-dashboard-date-chip">{todayText}</div>
+        <div className="doctor-dashboard-top-actions">
+          <DoctorNotificationBell />
+          <div className="doctor-dashboard-date-chip">{todayText}</div>
+        </div>
       </div>
 
       <div className="doctor-home-layout">
@@ -362,7 +374,10 @@ const DoctorHome = () => {
         <div className="doctor-home-content">
           <div id="doctor-section-overview" className="doctor-home-header card doctor-home-hero">
             <div>
-              <h3>{doctor?.name || 'Welcome Doctor'} <span className="doctor-hello-wave">👋</span></h3>
+              <h3>
+                {doctor?.name ? formatDoctorDisplayName(doctor.name) : 'Welcome Doctor'}{' '}
+                <span className="doctor-hello-wave">👋</span>
+              </h3>
               <p>{doctor?.speciality || 'Clinical workspace'} · Ready for today’s consultations</p>
               <small>{upcomingSummary}</small>
             </div>

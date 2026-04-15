@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "main": "src/server.js",
   "scripts": {
+    "prestart": "node scripts/free-port.js",
+    "predev": "node scripts/free-port.js",
     "start": "node src/server.js",
     "dev": "node src/server.js"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^4.22.1",
     "mongoose": "^9.3.3",

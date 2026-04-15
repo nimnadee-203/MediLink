@@ -37,6 +37,7 @@ import PaymentPage from './pages/PaymentPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import SymptomCheckerPage from './pages/SymptomCheckerPage';
 import { appointmentRequest } from './lib/api';
+import NotificationBell from './components/NotificationBell';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -677,6 +678,7 @@ function AppContent() {
               <Link to="/dashboard" className={cn("flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-sm font-bold transition-all", location.pathname === '/dashboard' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50')}>
                 <Activity size={18} /> <span className="hidden sm:inline">Dashboard</span>
               </Link>
+              {effectiveRole === 'patient' && <NotificationBell />}
               {effectiveRole === 'patient' && (
                 <Link to="/symptom-checker" className={cn("flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl text-sm font-bold transition-all", location.pathname === '/symptom-checker' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50')}>
                   <Stethoscope size={18} /> <span className="hidden sm:inline">Symptom Checker</span>
