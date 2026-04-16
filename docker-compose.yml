@@ -1,7 +1,3 @@
-x-common-env: &common-env
-  MONGODB_URL: "mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/test?retryWrites=true&w=majority&appName=MediLink"
-  MONGO_URI: "mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/test?retryWrites=true&w=majority&appName=MediLink"
-
 services:
   # --- API GATEWAY ---
   api-gateway:
@@ -31,9 +27,9 @@ services:
       - "8008:8008"
     env_file: ./services/auth-service/.env
     environment:
-      <<: *common-env
-      PORT: 8008
-      NOTIFICATION_SERVICE_URL: http://notification-service:8006
+      - PORT=8008
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/auth?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -43,9 +39,9 @@ services:
       - "8002:8002"
     env_file: ./services/patient-service/.env
     environment:
-      <<: *common-env
-      PORT: 8002
-      NOTIFICATION_SERVICE_URL: http://notification-service:8006
+      - PORT=8002
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/patients?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -55,9 +51,9 @@ services:
       - "8004:8004"
     env_file: ./services/appointment-service/.env
     environment:
-      <<: *common-env
-      PORT: 8004
-      NOTIFICATION_SERVICE_URL: http://notification-service:8006
+      - PORT=8004
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/appointments?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -67,9 +63,13 @@ services:
       - "4000:4000"
     env_file: ./services/doctor-service/.env
     environment:
-      <<: *common-env
-      PORT: 4000
-      NOTIFICATION_SERVICE_URL: http://notification-service:8006
+      - PORT=4000
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - APPOINTMENT_DB_NAME=appointments
+      - PATIENT_DB_NAME=patients
+      - APPOINTMENT_SERVICE_URL=http://appointment-service:8004
+      - PATIENT_SERVICE_URL=http://patient-service:8002
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/doctors?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -79,10 +79,10 @@ services:
       - "8006:8006"
     env_file: ./services/notification-service/.env
     environment:
-      <<: *common-env
-      PORT: 8006
-      PATIENT_SERVICE_URL: http://patient-service:8002
-      DOCTOR_SERVICE_URL: http://doctor-service:4000
+      - PORT=8006
+      - PATIENT_SERVICE_URL=http://patient-service:8002
+      - DOCTOR_SERVICE_URL=http://doctor-service:4000
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/notifications?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -92,8 +92,8 @@ services:
       - "8019:8019"
     env_file: ./services/payment-service/.env
     environment:
-      <<: *common-env
-      PORT: 8019
+      - PORT=8019
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/payments?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -102,8 +102,8 @@ services:
     ports:
       - "8007:8007"
     environment:
-      <<: *common-env
-      PORT: 8007
+      - PORT=8007
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/symptom_checker?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 
@@ -113,8 +113,8 @@ services:
       - "8009:8007"
     env_file: ./services/telemedicine-service/.env
     environment:
-      <<: *common-env
-      PORT: 8007
+      - PORT=8007
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/telemedicine?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
 

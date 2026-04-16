@@ -1,8 +1,11 @@
 import doctorModel from "../models/Doctor.js";
-import appointmentReadModel from "../models/AppointmentRead.js";
 import mongoose from "mongoose";
 import patientLookupModel from "../models/PatientLookup.js";
 import { sendNotificationToUser } from "../lib/notificationClient.js";
+import axios from "axios";
+
+const APPOINTMENT_SERVICE_URL = process.env.APPOINTMENT_SERVICE_URL || "http://localhost:8004";
+const PATIENT_SERVICE_URL = process.env.PATIENT_SERVICE_URL || "http://localhost:8002";
 
 const doctorProjection =
 	"name email image speciality degree experience about consultationMode available fees address slots_booked status";
@@ -71,12 +74,22 @@ export const getDoctorById = async (req, res) => {
 export const getDoctorUpcomingAppointments = async (req, res) => {
 	try {
 		const doctorId = req.doctorId;
+		const { dtoken } = req.headers;
+
 		const doctor = await doctorModel.findById(doctorId).select("name speciality image");
 		if (!doctor) {
 			return res.json({ success: false, message: "Doctor not found" });
 		}
 
-		const appointments = await appointmentReadModel.find({ doctorId }).sort({ slotDate: 1, slotTime: 1, createdAt: -1 });
+		// Fetch all appointments for this doctor via appointment-service API
+		const appointmentsRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments?doctorId=${doctorId}`, {
+			headers: { dtoken }
+		}).catch(err => {
+			console.error("Failed to fetch appointments from service:", err.message);
+			return { data: { appointments: [] } };
+		});
+
+		const appointments = appointmentsRes.data?.appointments || [];
 
 		const now = Date.now();
 		const today = new Date().toISOString().split("T")[0];
@@ -86,10 +99,7 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 			.filter((appointment) => ["pending", "confirmed"].includes(appointment.status) && toTime(appointment) >= now)
 			.slice(0, 10);
 
-		const patientIds = [...new Set(upcomingAppointments.map((item) => String(item.patientId)).filter(Boolean))];
-		const patients = await patientLookupModel.find({ _id: { $in: patientIds } }).select("name email").lean();
-		const patientMap = new Map(patients.map((patient) => [String(patient._id), patient]));
-
+		// Extract patient names if we have them in the response, else lookup locally
 		const stats = {
 			todayAppointments: appointments.filter((appointment) => appointment.slotDate === today && appointment.status !== "cancelled").length,
 			pendingAppointments: appointments.filter((appointment) => appointment.status === "pending").length,
@@ -106,9 +116,9 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 			},
 			stats,
 			upcomingAppointments: upcomingAppointments.map((appointment) => ({
-				_id: String(appointment._id),
+				_id: String(appointment.id || appointment._id),
 				patientId: String(appointment.patientId),
-				patientName: patientMap.get(String(appointment.patientId))?.name || "Patient",
+				patientName: appointment.patientName || "Patient",
 				slotDate: appointment.slotDate,
 				slotTime: appointment.slotTime,
 				reason: appointment.reason || "",
@@ -128,27 +138,37 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 export const getDoctorAppointmentDetails = async (req, res) => {
 	try {
 		const { appointmentId } = req.params;
-		if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-			return res.json({ success: false, message: "Invalid appointment id" });
-		}
+		const { dtoken } = req.headers;
 
-		const appointment = await appointmentReadModel.findById(appointmentId).lean();
-		if (!appointment) {
+		// Fetch appointment basics from appointment-service
+		const appointmentRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+			headers: { dtoken }
+		});
+
+		if (!appointmentRes.data?.appointment) {
 			return res.json({ success: false, message: "Appointment not found" });
 		}
 
+		const appointment = appointmentRes.data.appointment;
+
+		// Verify this doctor is the one assigned
 		if (String(appointment.doctorId) !== String(req.doctorId)) {
 			return res.json({ success: false, message: "Not authorized for this appointment" });
 		}
 
-		const patient = await patientLookupModel
+		// Fetch basic patient details from patient-service
+		const patientRes = await axios.get(`${PATIENT_SERVICE_URL}/api/patients/${appointment.patientId}`).catch(() => ({ data: null }));
+		const patientBasic = patientRes.data;
+
+		// Fetch extended patient details locally for reports (since doctor-service has the patient-lookup logic)
+		const patientLookup = await patientLookupModel
 			.findById(appointment.patientId)
 			.select("name email reports")
 			.lean();
 
 		const selectedReportIdSet = new Set((appointment.reportIds || []).map((id) => reportIdKey(id)).filter(Boolean));
-		const attachedReports = Array.isArray(patient?.reports)
-			? patient.reports
+		const attachedReports = Array.isArray(patientLookup?.reports)
+			? patientLookup.reports
 					.filter((report) => report?._id != null && selectedReportIdSet.has(reportIdKey(report._id)))
 					.map((report) => ({
 						id: String(report._id),
@@ -165,129 +185,60 @@ export const getDoctorAppointmentDetails = async (req, res) => {
 		return res.json({
 			success: true,
 			appointment: {
-				_id: String(appointment._id),
-				patientId: String(appointment.patientId),
-				patientName: patient?.name || "Patient",
-				patientEmail: patient?.email || "",
-				doctorId: String(appointment.doctorId),
-				slotDate: appointment.slotDate,
-				slotTime: appointment.slotTime,
-				amount: appointment.amount,
-				reason: appointment.reason || "",
-				visitMode: appointment.visitMode === "telemedicine" ? "telemedicine" : "in_person",
-				status: appointment.status,
-				paymentStatus: appointment.paymentStatus,
-				reportIds: (appointment.reportIds || []).map((id) => String(id)),
-				reports: attachedReports,
-				createdAt: appointment.createdAt,
-				updatedAt: appointment.updatedAt
+				...appointment,
+				_id: String(appointment.id || appointment._id),
+				patientName: patientBasic?.name || patientLookup?.name || "Patient",
+				patientEmail: patientBasic?.email || patientLookup?.email || "",
+				reports: attachedReports
 			}
 		});
 	} catch (error) {
 		console.log(error);
-		return res.json({ success: false, message: error.message });
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
 	}
 };
 
 export const approveDoctorAppointment = async (req, res) => {
 	try {
 		const { appointmentId } = req.params;
-		if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-			return res.json({ success: false, message: "Invalid appointment id" });
-		}
+		const { dtoken } = req.headers;
 
-		const appointment = await appointmentReadModel.findById(appointmentId).lean();
-		if (!appointment) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		if (String(appointment.doctorId) !== String(req.doctorId)) {
-			return res.json({ success: false, message: "Not authorized for this appointment" });
-		}
-
-		if (appointment.status === "cancelled" || appointment.status === "completed") {
-			return res.json({ success: false, message: `Cannot approve an appointment with status "${appointment.status}"` });
-		}
-
-		if (appointment.status === "confirmed") {
-			return res.json({ success: false, message: "Appointment is already confirmed" });
-		}
-
-		// updateOne avoids full-document save() issues (e.g. legacy / mixed shapes in appointment-db).
-		const result = await appointmentReadModel.updateOne(
-			{ _id: appointmentId },
-			{ $set: { status: "confirmed" } }
-		);
-
-		if (result.matchedCount === 0) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		const doctor = await doctorModel.findById(req.doctorId).select("name").lean();
-		const rawName = (doctor?.name || "").replace(/^dr\.?\s+/i, "").trim();
-		const doctorLabel = rawName ? `Dr. ${rawName}` : "Your clinician";
-
-		await sendNotificationToUser({
-			recipientId: appointment.patientId,
-			recipientRole: "patient",
-			type: "appointment_confirmed",
-			title: "Appointment confirmed",
-			body: `Your visit on ${appointment.slotDate} at ${appointment.slotTime} was confirmed by ${doctorLabel}.`,
-			appointmentId
+		const response = await axios.patch(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+			status: "confirmed"
+		}, {
+			headers: { dtoken }
 		});
+
+		if (!response.data?.appointment) {
+			throw new Error("Update failed");
+		}
 
 		return res.json({ success: true, message: "Appointment approved", status: "confirmed" });
 	} catch (error) {
 		console.log(error);
-		return res.json({ success: false, message: error.message });
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
 	}
 };
 
 export const cancelDoctorAppointment = async (req, res) => {
 	try {
 		const { appointmentId } = req.params;
-		if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-			return res.json({ success: false, message: "Invalid appointment id" });
-		}
+		const { dtoken } = req.headers;
 
-		const appointment = await appointmentReadModel.findById(appointmentId).lean();
-		if (!appointment) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		if (String(appointment.doctorId) !== String(req.doctorId)) {
-			return res.json({ success: false, message: "Not authorized for this appointment" });
-		}
-
-		if (appointment.status === "cancelled") {
-			return res.json({ success: false, message: "Appointment already cancelled" });
-		}
-		if (appointment.status === "completed") {
-			return res.json({ success: false, message: "Completed appointments cannot be cancelled" });
-		}
-
-		const result = await appointmentReadModel.updateOne(
-			{ _id: appointmentId },
-			{ $set: { status: "cancelled" } }
-		);
-
-		if (result.matchedCount === 0) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		await sendNotificationToUser({
-			recipientId: appointment.patientId,
-			recipientRole: "patient",
-			type: "appointment_cancelled_clinic",
-			title: "Appointment cancelled",
-			body: `Your visit on ${appointment.slotDate} at ${appointment.slotTime} was cancelled by the clinic.`,
-			appointmentId
+		const response = await axios.patch(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}/cancel`, {
+			cancelledBy: "doctor"
+		}, {
+			headers: { dtoken }
 		});
+
+		if (!response.data?.appointment) {
+			throw new Error("Cancellation failed");
+		}
 
 		return res.json({ success: true, message: "Appointment cancelled", status: "cancelled" });
 	} catch (error) {
 		console.log(error);
-		return res.json({ success: false, message: error.message });
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
 	}
 };
 

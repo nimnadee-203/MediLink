@@ -204,7 +204,7 @@ function AppContent() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminSection, setAdminSection] = useState('overview');
   const [doctorSection, setDoctorSection] = useState('overview');
-  const [patientSection, setPatientSection] = useState('overview');
+  const [patientSection, setPatientSection] = useState('appointments');
   const [adminNewUser, setAdminNewUser] = useState({ name: '', username: '', email: '', password: '', role: 'patient', phone: '' });
   const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
   const [editingAdminUserId, setEditingAdminUserId] = useState(null);
@@ -391,7 +391,7 @@ function AppContent() {
   useEffect(() => {
     setAdminSection('overview');
     setDoctorSection('overview');
-    setPatientSection('overview');
+    setPatientSection('appointments');
   }, [effectiveRole]);
 
   useEffect(() => {
@@ -1546,13 +1546,7 @@ function AppContent() {
                         <p className="text-slate-800 font-semibold tracking-tight">Health Dashboard</p>
                       </div>
                       <div className="space-y-1.5 focus:outline-none">
-                        <button
-                          type="button"
-                          className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', patientSection === 'overview' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                          onClick={() => setPatientSection('overview')}
-                        >
-                          <Activity size={18} className={patientSection === 'overview' ? 'text-indigo-600' : 'text-slate-400'} /> Dashboard Overview
-                        </button>
+
                         {hasPrivilege('browse_doctors') && (
                           <button
                             type="button"
@@ -1611,68 +1605,7 @@ function AppContent() {
                     </Card>
 
                     <div className="space-y-8">
-                      {patientSection === 'overview' && (
-                        <>
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200/60">
-                            <div className="flex items-center gap-5">
-                        <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-blue-600 text-white rounded-2xl shadow-md flex items-center justify-center text-2xl font-bold tracking-tight">
-                          {(patient?.name || user?.firstName || 'P')?.charAt(0)?.toUpperCase()}
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Welcome back, {effectivePatientName}</h2>
-                          <p className="text-slate-500 text-sm font-medium mt-1">Manage your health records securely.</p>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <Card className="p-6 relative overflow-hidden group">
-                        <div className="h-1 bg-indigo-500 absolute top-0 left-0 w-full opacity-50"></div>
-                        <div className="flex justify-between items-start mb-4">
-                          <p className="font-medium text-slate-500">Upcoming Appointments</p>
-                          <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform"><Calendar size={20} /></div>
-                        </div>
-                        <p className="text-4xl font-extrabold text-slate-800 tracking-tight">1</p>
-                      </Card>
-                      <Card className="p-6 relative overflow-hidden group">
-                        <div className="h-1 bg-emerald-500 absolute top-0 left-0 w-full opacity-50"></div>
-                        <div className="flex justify-between items-start mb-4">
-                          <p className="font-medium text-slate-500">Medical Reports</p>
-                          <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform"><FileText size={20} /></div>
-                        </div>
-                        <p className="text-4xl font-extrabold text-slate-800 tracking-tight">{reports.length}</p>
-                      </Card>
-                      <Card className="p-6 relative overflow-hidden group">
-                        <div className="h-1 bg-amber-500 absolute top-0 left-0 w-full opacity-50"></div>
-                        <div className="flex justify-between items-start mb-4">
-                          <p className="font-medium text-slate-500">Active Prescriptions</p>
-                          <div className="p-2 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform"><Activity size={20} /></div>
-                        </div>
-                        <p className="text-4xl font-extrabold text-slate-800 tracking-tight">2</p>
-                      </Card>
-                    </div>
-
-                    <Card className="border-t-4 border-t-slate-200">
-                      <h3 className="text-lg font-bold text-slate-800 mb-4 px-1">Next Appointment</h3>
-                      <ul className="flex flex-col gap-3">
-                        <li className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 hover:border-indigo-200 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 border border-slate-100">
-                               <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"></div>
-                            </div>
-                            <div>
-                               <p className="font-bold text-slate-800">Dr. Sarah Connor</p>
-                               <p className="text-sm font-medium text-slate-500">General Checkup</p>
-                            </div>
-                          </div>
-                          <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 text-sm font-bold text-indigo-600 shrink-0">
-                             Tomorrow, 10:00 AM
-                          </div>
-                        </li>
-                      </ul>
-                    </Card>
-                        </>
-                      )}
 
                       {patientSection === 'doctors' && hasPrivilege('browse_doctors') && (
                         <DoctorsList />

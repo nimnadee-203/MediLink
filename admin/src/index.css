@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --primary-color: #4f46e5;
   --primary-hover: #4338ca;
@@ -1671,6 +1675,7 @@ h2 {
     grid-template-columns: 1fr;
     gap: 14px;
   }
+}
 /* Appointments Page Styles */
 .appointments-list-container {
   overflow-x: auto;

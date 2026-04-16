@@ -48,22 +48,14 @@ const startServer = async () => {
     await connectDB();
     dbConnected = true;
   } catch (error) {
-    if (requireDb) {
-      console.error('Failed to start appointment service', error);
-      process.exit(1);
-    }
-
-    console.error(
-      'MongoDB unavailable. Starting appointment service in degraded mode (database routes may fail).'
-    );
-    console.error(error.message);
+    console.error('CRITICAL: Failed to connect to MongoDB Atlas!', error.message);
+    console.error('Check your Atlas IP Whitelist and your .env credentials.');
+    process.exit(1);
   }
 
   app.listen(port, () => {
     console.log(`Appointment Service listening at http://localhost:${port}`);
-    if (!dbConnected) {
-      console.log('Running without MongoDB connection (REQUIRE_DB=false).');
-    }
+    console.log('✅ MongoDB Connection Verified');
   });
 };
 

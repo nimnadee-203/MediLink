@@ -7,6 +7,7 @@ import validator from "validator"
 import bcrypt, { hash } from 'bcrypt'
 import {v2 as cloudinary} from 'cloudinary'
 import jwt from 'jsonwebtoken'
+import axios from 'axios'
 
 //API for adding doctor
 export const addDoctor = async (req, res)=>{
@@ -146,22 +147,38 @@ export const loginDoctor = async (req, res) => {
 //API to get dashboard data for admin panel
 export const adminDashboard = async (req,res)=>{
     try{
-        const doctors = await doctorModel.find({})
-        const users = await userModel.find({})
-        const appoiments = await appoimentModel.find({})
+        const { atoken } = req.headers;
+
+        // Fetch local doctors count from the 'doctors' database
+        const doctorsCount = await doctorModel.countDocuments({});
+
+        // Fetch patients from patient-service (Port 8002)
+        // Note: We pass the admin token for authorization
+        const patientsRes = await axios.get('http://localhost:8002/api/patients/admin/users', { 
+            headers: { atoken } 
+        }).catch(() => ({ data: { users: [] } }));
+        const patientsCount = patientsRes.data?.users?.length || 0;
+
+        // Fetch appointments from appointment-service (Port 8004)
+        // The service already returns an 'appointments' array and a 'count'
+        const appointmentsRes = await axios.get('http://localhost:8004/api/appointments', { 
+            headers: { atoken } 
+        }).catch(() => ({ data: { appointments: [] } }));
+        
+        const appointments = appointmentsRes.data?.appointments || [];
+        const appointmentsCount = appointmentsRes.data?.count || appointments.length;
 
         const dashData = {
-            doctors:doctors.length,
-            appoiments:appoiments.length,
-            patients:users.length,
-            latestAppoiments: appoiments.reverse().slice(0,5)
-
+            doctors: doctorsCount,
+            appoiments: appointmentsCount,
+            patients: patientsCount,
+            latestAppoiments: appointments.slice(0, 5)
         }
 
         res.json({success:true,dashData})
 
     }catch(error){
-        console.log(error)
+        console.log("Dashboard aggregation failed:", error.message)
         res.json({success:false,message:error.message})
     }
 }

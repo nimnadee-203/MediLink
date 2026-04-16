@@ -61,20 +61,32 @@ const verifyClerkToken = async (token) => {
 
 const authenticateJwt = async (req, res, next) => {
   try {
-    const { atoken } = req.headers;
+    const { atoken, dtoken } = req.headers;
     const authHeader = req.headers.authorization;
 
     // First check for Admin atoken
     if (atoken) {
       try {
         const decoded = jwt.verify(atoken, process.env.JWT_SECRET || 'shanuka');
-        // Simple validation as seen in doctor-service
         if (decoded) {
           req.user = { id: 'admin', role: 'admin', authType: 'admin' };
           return next();
         }
       } catch (err) {
-        console.log("Admin token verification failed, trying Clerk...");
+        console.log("Admin token verification failed, trying Doctor...");
+      }
+    }
+
+    // Check for Doctor dtoken
+    if (dtoken) {
+      try {
+        const decoded = jwt.verify(dtoken, process.env.JWT_SECRET || 'shanuka');
+        if (decoded && decoded.id) {
+          req.user = { id: decoded.id, role: 'doctor', authType: 'doctor' };
+          return next();
+        }
+      } catch (err) {
+        console.log("Doctor token verification failed, trying Clerk...");
       }
     }
 
