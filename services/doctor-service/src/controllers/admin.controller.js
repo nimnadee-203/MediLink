@@ -10,6 +10,8 @@ import jwt from 'jsonwebtoken'
 import axios from 'axios'
 import { createClerkClient } from '@clerk/backend'
 
+
+// Gets the setup for Clerk (used for user accounts) using a secret key
 const getClerkClient = () => {
     const secretKey = process.env.CLERK_SECRET_KEY;
     if (!secretKey || /replace_with/i.test(secretKey)) {
@@ -19,6 +21,7 @@ const getClerkClient = () => {
     return createClerkClient({ secretKey });
 };
 
+// Splits a full name into a first name and a last name
 const splitName = (fullName = '') => {
     const normalized = String(fullName).trim().replace(/\s+/g, ' ');
     if (!normalized) {
@@ -32,6 +35,7 @@ const splitName = (fullName = '') => {
     };
 };
 
+// Cleans up a username so it works with Clerk's rules
 const normalizeClerkUsername = (value = '') => {
     let username = String(value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
     if (!username) {
@@ -49,13 +53,16 @@ const normalizeClerkUsername = (value = '') => {
     return username.slice(0, 32);
 };
 
+// Pulls out the text message from a Clerk error
 const extractClerkErrorText = (error) =>
     error?.errors?.map((item) => `${item?.code || ''}:${item?.longMessage || item?.message || ''}`).join(' | ') ||
     error?.message ||
     '';
 
+// Checks if the error means the username is already taken or wrong
 const hasUsernameRequirementError = (error) => /username|already taken|identifier exists/i.test(extractClerkErrorText(error));
 
+// Makes a list of possible usernames using the email
 const buildUsernameCandidates = (email = '') => {
     const base = normalizeClerkUsername(String(email || '').split('@')[0]);
     const compact = base.replace(/[^a-z0-9]/g, '').slice(0, 24) || `doctor${Math.random().toString(36).slice(2, 7)}`;
@@ -69,6 +76,7 @@ const buildUsernameCandidates = (email = '') => {
     ]));
 };
 
+// Makes sure a doctor has an account in Clerk, creating one if needed
 const ensureDoctorClerkAccount = async ({ name, email, password }) => {
     const clerkClient = getClerkClient();
     if (!clerkClient) {
@@ -157,7 +165,7 @@ const ensureDoctorClerkAccount = async ({ name, email, password }) => {
     return { clerkUserId: created.id, created: true };
 };
 
-//API for adding doctor
+// Adds a new doctor with their details and photo, and creates their login
 export const addDoctor = async (req, res)=>{
     try{
         
@@ -259,7 +267,7 @@ export const addDoctor = async (req, res)=>{
     }
 }
 
-//API for admin logn
+// Checks admin email and password to log them in
 export const loginAdmin = async (req,res)=>{
     try{
         const {email,password} = req.body;
@@ -280,7 +288,7 @@ export const loginAdmin = async (req,res)=>{
     }
 }
 
-//API for doctor login
+// Checks doctor email and password to log them in
 export const loginDoctor = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -327,7 +335,7 @@ export const loginDoctor = async (req, res) => {
 
 
 
-//API to get dashboard data for admin panel
+// Gets total numbers of doctors, patients, and appointments for the admin screen
 export const adminDashboard = async (req,res)=>{
     try{
         const { atoken } = req.headers;
@@ -366,7 +374,7 @@ export const adminDashboard = async (req,res)=>{
     }
 }
 
-// API to get all doctors list for admin panel
+// Gets a list of all doctors to show to the admin
 export const allDoctors = async (req,res) => {
     try {
         const doctors = await doctorModel.find({}).select('-password')
@@ -378,7 +386,7 @@ export const allDoctors = async (req,res) => {
     }
 }
 
-// API to change doctor availability for admin panel
+// Turns a doctor's availability on or off
 export const changeAvailability = async (req,res) => {
     try {
         const {docId} = req.body
@@ -392,7 +400,7 @@ export const changeAvailability = async (req,res) => {
     }
 }
 
-// API to update doctor details (excluding password)
+// Changes details about a doctor, like their fees or address
 export const updateDoctor = async (req, res) => {
     try {
         const { docId, name, speciality, degree, experience, about, fees, address, status, available, consultationMode } = req.body
@@ -425,7 +433,7 @@ export const updateDoctor = async (req, res) => {
     }
 }
 
-// API to delete a doctor
+// Removes a doctor from the system completely
 export const deleteDoctor = async (req, res) => {
     try {
         const { docId } = req.body

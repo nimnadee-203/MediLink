@@ -3,13 +3,41 @@ const APPOINTMENT_BASE_URLS = [
   'http://localhost:8004/api/appointments'
 ];
 
+function getClerkIdentityHeaders() {
+  if (typeof window === 'undefined') return {};
+
+  const clerkUser = window?.Clerk?.user;
+  if (!clerkUser) return {};
+
+  const email =
+    clerkUser?.primaryEmailAddress?.emailAddress ||
+    clerkUser?.emailAddresses?.[0]?.emailAddress ||
+    '';
+  const name =
+    clerkUser?.fullName ||
+    [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(' ').trim();
+  const phone =
+    clerkUser?.primaryPhoneNumber?.phoneNumber ||
+    clerkUser?.phoneNumbers?.[0]?.phoneNumber ||
+    '';
+
+  return {
+    ...(email ? { 'x-clerk-email': email } : {}),
+    ...(name ? { 'x-clerk-name': name } : {}),
+    ...(phone ? { 'x-clerk-phone': phone } : {})
+  };
+}
+
 export async function appointmentRequest(path, getToken, options = {}) {
   let lastFailure = null;
 
   for (const baseUrl of APPOINTMENT_BASE_URLS) {
     try {
       const token = await getToken();
-      const headers = { ...(options.headers || {}) };
+      const headers = {
+        ...getClerkIdentityHeaders(),
+        ...(options.headers || {})
+      };
       if (token) headers.Authorization = `Bearer ${token}`;
 
       let body = options.body;

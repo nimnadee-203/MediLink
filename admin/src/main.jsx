@@ -8,6 +8,10 @@ import AdminContextProvider from './context/AdminContext.jsx'
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder'
 
+if (!clerkPublishableKey || clerkPublishableKey === 'pk_test_placeholder') {
+  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY for admin app. Set it in admin/.env before running.');
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ClerkProvider publishableKey={clerkPublishableKey}>

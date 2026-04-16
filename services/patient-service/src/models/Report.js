@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { resolveSafeDbName } from '../lib/dbName.js';
 
 const reportSchema = new mongoose.Schema(
   {
@@ -26,7 +27,8 @@ reportSchema.index(
   }
 );
 
-const reportDb = mongoose.connection.useDb(process.env.REPORT_DB_NAME || 'Reports', { useCache: true });
+const reportDbName = resolveSafeDbName(process.env.REPORT_DB_NAME, 'Reports', 'patient-service');
+const reportDb = mongoose.connection.useDb(reportDbName, { useCache: true });
 const reportCollectionName = process.env.REPORT_COLLECTION_NAME || 'reports';
 
 const Report = reportDb.models.Report || reportDb.model('Report', reportSchema, reportCollectionName);

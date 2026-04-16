@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
+// This function gets the Clerk secret key from
 const getClerkSecretKey = () => {
   const secretKey = process.env.CLERK_SECRET_KEY;
 
@@ -14,6 +14,7 @@ const getClerkSecretKey = () => {
   return secretKey;
 };
 
+// This function finds the main admin email.
 const getPrimaryAdminEmail = () => {
   const candidates = [
     ...(process.env.ADMIN_EMAILS || '').split(','),
@@ -27,6 +28,7 @@ const getPrimaryAdminEmail = () => {
   return candidates[0] || 'admin@medisync.ai';
 };
 
+// This function decodes a JWT token without fully verifying it.
 const decodeJwtPayloadUnsafe = (token) => {
   const parts = token.split('.');
   if (parts.length !== 3) {
@@ -50,6 +52,66 @@ const decodeJwtPayloadUnsafe = (token) => {
   return payload;
 };
 
+const extractEmailFromPayload = (payload = {}) => {
+  const direct = [
+    payload.email,
+    payload.email_address,
+    payload.primary_email_address,
+    payload.primaryEmailAddress
+  ].find((value) => typeof value === 'string' && value.trim());
+
+  if (direct) {
+    return String(direct).trim();
+  }
+
+  const fromArray = [
+    payload.email_addresses,
+    payload.emailAddresses,
+    payload.emails
+  ].find(Array.isArray);
+
+  if (Array.isArray(fromArray)) {
+    const first = fromArray
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.email_address || entry?.emailAddress || entry?.address))
+      .find((value) => typeof value === 'string' && value.trim());
+    if (first) {
+      return String(first).trim();
+    }
+  }
+
+  return '';
+};
+
+const extractPhoneFromPayload = (payload = {}) => {
+  const direct = [
+    payload.phone_number,
+    payload.phoneNumber,
+    payload.primary_phone_number,
+    payload.primaryPhoneNumber
+  ].find((value) => typeof value === 'string' && value.trim());
+
+  if (direct) {
+    return String(direct).trim();
+  }
+
+  const fromArray = [
+    payload.phone_numbers,
+    payload.phoneNumbers
+  ].find(Array.isArray);
+
+  if (Array.isArray(fromArray)) {
+    const first = fromArray
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.phone_number || entry?.phoneNumber || entry?.number))
+      .find((value) => typeof value === 'string' && value.trim());
+    if (first) {
+      return String(first).trim();
+    }
+  }
+
+  return '';
+};
+
+// This function checks a Clerk token and returns clean user data.
 const verifyClerkToken = async (token) => {
   const secretKey = getClerkSecretKey();
 
@@ -80,14 +142,15 @@ const verifyClerkToken = async (token) => {
 
   return {
     id: payload.sub,
-    email: payload.email || payload.email_address || '',
+    email: extractEmailFromPayload(payload),
     name: fullName,
-    phone: payload.phone_number || '',
+    phone: extractPhoneFromPayload(payload),
     role: resolvedRole,
     authType: 'clerk'
   };
 };
 
+// This is the main middleware.
 const authMiddleware = async (req, res, next) => {
   try {
     const { atoken } = req.headers;

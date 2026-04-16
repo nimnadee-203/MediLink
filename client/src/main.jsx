@@ -7,6 +7,10 @@ import { BrowserRouter } from 'react-router-dom'
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_placeholder'
 
+if (!clerkPublishableKey || clerkPublishableKey === 'pk_test_placeholder') {
+  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY for client app. Set it in client/.env before running.');
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ClerkProvider publishableKey={clerkPublishableKey}>

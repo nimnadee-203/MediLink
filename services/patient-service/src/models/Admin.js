@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { resolveSafeDbName } from '../lib/dbName.js';
 
 const reportSchema = new mongoose.Schema(
   {
@@ -31,7 +32,8 @@ const adminSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const adminDb = mongoose.connection.useDb(process.env.ADMIN_DB_NAME || 'admin_1', { useCache: true });
+const adminDbName = resolveSafeDbName(process.env.ADMIN_DB_NAME, 'admin_1', 'patient-service');
+const adminDb = mongoose.connection.useDb(adminDbName, { useCache: true });
 const adminCollectionName = process.env.ADMIN_COLLECTION_NAME || 'admin';
 
 const Admin = adminDb.models.Admin || adminDb.model('Admin', adminSchema, adminCollectionName);

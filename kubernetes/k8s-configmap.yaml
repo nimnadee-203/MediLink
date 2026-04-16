@@ -30,7 +30,7 @@ data:
   APPOINTMENT_DB_NAME: "appointments"
   DOCTOR_DB_NAME: "doctors"
   PATIENT_DB_NAME: "patients"
-  ADMIN_DB_NAME: "admin"
+  ADMIN_DB_NAME: "admin_1"
   NOTIFICATION_DB_NAME: "notification-db"
 
   # --- Email Provider Config ---
