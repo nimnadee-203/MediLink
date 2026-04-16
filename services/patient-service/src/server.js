@@ -35,6 +35,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/patient-uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/patients', patientRoutes);
 
 app.get('/', (req, res) => {

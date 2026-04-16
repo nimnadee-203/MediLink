@@ -69,6 +69,42 @@ const PREVIEW_ORIGIN_CANDIDATES = Array.from(
   )
 );
 
+const getPreferredPreviewOrigin = () => {
+  const patientServiceOrigin = PREVIEW_ORIGIN_CANDIDATES.find((origin) => {
+    try {
+      return new URL(origin).port === '8002';
+    } catch {
+      return false;
+    }
+  });
+
+  return patientServiceOrigin || PREVIEW_ORIGIN_CANDIDATES[0] || window.location.origin;
+};
+
+const isGatewayOrigin = (origin = '') => {
+  try {
+    const { port } = new URL(origin);
+    return port === '8000';
+  } catch {
+    return false;
+  }
+};
+
+const normalizeUploadPathForOrigin = (rawPath, origin) => {
+  const safePath = String(rawPath || '');
+  if (!safePath) return safePath;
+
+  if (isGatewayOrigin(origin)) {
+    return safePath.startsWith('/uploads/')
+      ? safePath.replace('/uploads/', '/patient-uploads/')
+      : safePath;
+  }
+
+  return safePath.startsWith('/patient-uploads/')
+    ? safePath.replace('/patient-uploads/', '/uploads/')
+    : safePath;
+};
+
 const ROLE_PRIVILEGES = {
   patient: [
     'browse_doctors',
@@ -120,12 +156,10 @@ const formatAppointmentDate = (dateStr) => {
 const getReportPreviewUrl = (report) => {
   if (!report) return null;
 
-  const origin = PREVIEW_ORIGIN_CANDIDATES[0] || window.location.origin;
+  const origin = getPreferredPreviewOrigin();
 
   if (report.filePath) {
-    const normalizedPath = report.filePath.startsWith('/uploads/')
-      ? report.filePath.replace('/uploads/', '/patient-uploads/')
-      : report.filePath;
+    const normalizedPath = normalizeUploadPathForOrigin(report.filePath, origin);
 
     if (/^https?:\/\//i.test(normalizedPath)) {
       return normalizedPath;
@@ -135,7 +169,8 @@ const getReportPreviewUrl = (report) => {
   }
 
   if (report.fileName) {
-    return `${origin}/patient-uploads/reports/${encodeURIComponent(report.fileName)}`;
+    const basePath = isGatewayOrigin(origin) ? '/patient-uploads/reports/' : '/uploads/reports/';
+    return `${origin}${basePath}${encodeURIComponent(report.fileName)}`;
   }
 
   return null;
@@ -145,10 +180,8 @@ const getProfileImagePreviewUrl = (imagePath) => {
   if (!imagePath) return '';
   if (/^https?:\/\//i.test(imagePath)) return imagePath;
 
-  const origin = PREVIEW_ORIGIN_CANDIDATES[0] || window.location.origin;
-  const normalizedPath = String(imagePath).startsWith('/uploads/')
-    ? String(imagePath).replace('/uploads/', '/patient-uploads/')
-    : String(imagePath);
+  const origin = getPreferredPreviewOrigin();
+  const normalizedPath = normalizeUploadPathForOrigin(String(imagePath), origin);
 
   return `${origin}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
 };
