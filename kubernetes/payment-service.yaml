@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  labels:
+    app: payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+      - name: payment-service
+        image: medisync-payment-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8019
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PORT_PAYMENT
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: MONGODB_URL_PAYMENTS
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: STRIPE_SECRET_KEY
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+spec:
+  selector:
+    app: payment-service
+  ports:
+  - protocol: TCP
+    port: 8019
+    targetPort: 8019
+  type: ClusterIP

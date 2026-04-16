@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: medisync-notification-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8006
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PORT_NOTIFICATION
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: MONGODB_URL_NOTIFICATIONS
+        - name: EMAIL_PROVIDER
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: EMAIL_PROVIDER
+        - name: SMTP_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: SMTP_HOST
+        - name: SMTP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: SMTP_PORT
+        - name: SMTP_SECURE
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: SMTP_SECURE
+        - name: EMAIL_USER
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: EMAIL_USER
+        - name: EMAIL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: EMAIL_PASSWORD
+        - name: EMAIL_FROM
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: EMAIL_FROM
+        - name: NOTIFICATION_INTERNAL_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: NOTIFICATION_INTERNAL_SECRET
+        - name: PATIENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PATIENT_SERVICE_URL
+        - name: DOCTOR_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: DOCTOR_SERVICE_URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - protocol: TCP
+    port: 8006
+    targetPort: 8006
+  type: ClusterIP
