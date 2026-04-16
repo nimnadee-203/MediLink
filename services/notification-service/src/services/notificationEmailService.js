@@ -8,7 +8,8 @@ import * as emailTemplates from "./emailTemplates.js";
 async function getUserEmail(userId, userType) {
   try {
     if (userType === "patient") {
-      const response = await fetch(`http://localhost:8002/api/patients/emails/${userId}`, {
+      const baseUrl = process.env.PATIENT_SERVICE_URL || "http://localhost:8002";
+      const response = await fetch(`${baseUrl}/api/patients/emails/${userId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
@@ -17,7 +18,8 @@ async function getUserEmail(userId, userType) {
         return data.email;
       }
     } else if (userType === "doctor") {
-      const response = await fetch(`http://localhost:4000/api/doctor/emails/${userId}`, {
+      const baseUrl = process.env.DOCTOR_SERVICE_URL || "http://localhost:4000";
+      const response = await fetch(`${baseUrl}/api/doctor/emails/${userId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
@@ -39,7 +41,8 @@ async function getUserEmail(userId, userType) {
 async function getUserName(userId, userType) {
   try {
     if (userType === "patient") {
-      const response = await fetch(`http://localhost:8002/api/patients/${userId}`, {
+      const baseUrl = process.env.PATIENT_SERVICE_URL || "http://localhost:8002";
+      const response = await fetch(`${baseUrl}/api/patients/${userId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
@@ -48,7 +51,8 @@ async function getUserName(userId, userType) {
         return data.name;
       }
     } else if (userType === "doctor") {
-      const response = await fetch(`http://localhost:4000/api/doctor/${userId}`, {
+      const baseUrl = process.env.DOCTOR_SERVICE_URL || "http://localhost:4000";
+      const response = await fetch(`${baseUrl}/api/doctor/${userId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" }
       });
