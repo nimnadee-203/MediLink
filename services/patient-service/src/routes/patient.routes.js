@@ -3,22 +3,36 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 import { createClerkClient } from '@clerk/backend';
 import Patient from '../models/Patient.js';
+import Admin from '../models/Admin.js';
+import Report from '../models/Report.js';
 import { authMiddleware } from '../middleware/auth.js';
 import {
   listNotificationsForRecipient,
   markNotificationReadInternal
 } from '../lib/notificationClient.js';
+import {
+  migrateLegacyUsersToDomainCollections,
+  dropLegacyTestDatabases
+} from '../lib/userMigration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
+const DOCTOR_SERVICE_URL = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
+
 const reportsDir = path.join(__dirname, '..', 'uploads', 'reports');
 if (!fs.existsSync(reportsDir)) {
   fs.mkdirSync(reportsDir, { recursive: true });
+}
+
+const profilesDir = path.join(__dirname, '..', 'uploads', 'profiles');
+if (!fs.existsSync(profilesDir)) {
+  fs.mkdirSync(profilesDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -34,17 +48,45 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+const profileImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, profilesDir),
+  filename: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    cb(null, `${Date.now()}-profile${extension}`);
+  }
+});
+
+const profileImageUpload = multer({
+  storage: profileImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!String(file.mimetype || '').startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    return cb(null, true);
+  }
+});
+
 const USER_ROLES = ['patient', 'doctor', 'admin'];
 
+const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
+
 const parseAdminEmails = () =>
-  (process.env.ADMIN_EMAILS || 'admin@medisync.ai')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
+  Array.from(
+    new Set(
+      [
+        ...(process.env.ADMIN_EMAILS || '').split(','),
+        'admin@medisync.ai',
+        'it23589254@my.sliit.lk'
+      ]
+        .map((email) => normalizeEmail(email))
+        .filter(Boolean)
+    )
+  );
 
 const isAdminEmail = (email) => {
   if (!email) return false;
-  return parseAdminEmails().includes(email.toLowerCase());
+  return parseAdminEmails().includes(normalizeEmail(email));
 };
 
 const parseAdminClerkUserIds = () =>
@@ -155,40 +197,42 @@ const createClerkUserWithUsernameFallback = async ({ clerkClient, email, passwor
   throw lastError;
 };
 
-const sanitizePatient = (patient) => ({
-  id: patient._id,
-  name: patient.name,
-  username: patient.username,
-  email: patient.email,
-  role: patient.role || 'patient',
-  phone: patient.phone,
-  age: patient.age,
-  gender: patient.gender,
-  address: patient.address,
-  clerkUserId: patient.clerkUserId,
-  createdAt: patient.createdAt,
-  updatedAt: patient.updatedAt
+const sanitizeUser = (user, source = 'patient-db') => ({
+  id: user._id,
+  name: user.name,
+  username: user.username,
+  email: user.email,
+  role: user.role || (source === 'admin-db' ? 'admin' : 'patient'),
+  phone: user.phone,
+  age: user.age,
+  gender: user.gender,
+  address: user.address,
+  image: user.image,
+  clerkUserId: user.clerkUserId,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  source
 });
 
-const toPublicDoctor = (user) => {
-  const name = user.name || user.username || 'Doctor';
-  const avatarName = encodeURIComponent(name);
-  const image = user.image || `https://ui-avatars.com/api/?name=${avatarName}&background=1d4ed8&color=fff&size=200&bold=true`;
+const toWritablePayload = (user) => ({
+  name: user.name,
+  username: user.username,
+  email: user.email,
+  password: user.password,
+  clerkUserId: user.clerkUserId,
+  role: user.role,
+  phone: user.phone,
+  age: user.age,
+  gender: user.gender,
+  address: user.address,
+  image: user.image,
+  reports: user.reports || []
+});
 
-  return {
-    _id: String(user._id),
-    name,
-    speciality: user.speciality || 'General Physician',
-    degree: user.degree || 'MBBS',
-    experience: user.experience || '1 Year',
-    fees: Number.isFinite(Number(user.fees)) ? Number(user.fees) : 1500,
-    available: typeof user.available === 'boolean' ? user.available : true,
-    consultationMode: user.consultationMode === 'both' ? 'both' : 'in_person_only',
-    image,
-    about: user.about || 'Experienced clinician.',
-    address: user.address || 'Sri Lanka',
-    slots_booked: user.slots_booked || {}
-  };
+const normalizeInputRole = (role) => {
+  if (role === 'admin') return 'admin';
+  if (role === 'doctor') return 'doctor';
+  return 'patient';
 };
 
 const getProfileHints = (req) => ({
@@ -197,106 +241,516 @@ const getProfileHints = (req) => ({
   phone: req.headers['x-clerk-phone'] || ''
 });
 
-const resolveCurrentPatient = async (user, profileHints = {}) => {
-  const patient = await Patient.findOne({
-    $or: [{ clerkUserId: user.id }, { email: user.email }]
+const findUserByIdentity = async (user, profileHints = {}) => {
+  const emailCandidates = [
+    normalizeEmail(user?.email),
+    normalizeEmail(profileHints?.email)
+  ].filter(Boolean);
+
+  const orConditions = [];
+  if (user?.id) {
+    orConditions.push({ clerkUserId: user.id });
+  }
+  emailCandidates.forEach((email) => {
+    orConditions.push({ email });
   });
 
-  if (patient) {
+  if (!orConditions.length) {
+    return { adminUser: null, patientUser: null };
+  }
+
+  const [adminUser, patientUser] = await Promise.all([
+    Admin.findOne({ $or: orConditions }),
+    Patient.findOne({ $or: orConditions })
+  ]);
+
+  return { adminUser, patientUser };
+};
+
+const findUserByIdAcrossStores = async (userId) => {
+  const [adminUser, patientUser] = await Promise.all([
+    Admin.findById(userId),
+    Patient.findById(userId)
+  ]);
+
+  if (adminUser) {
+    return { user: adminUser, source: 'admin-db' };
+  }
+
+  if (patientUser) {
+    return { user: patientUser, source: 'patient-db' };
+  }
+
+  return { user: null, source: null };
+};
+
+const syncClerkMetadata = async (clerkUserId, role, name) => {
+  if (!clerkUserId) return;
+
+  const clerkClient = getClerkClient();
+  if (!clerkClient) return;
+
+  if (role) {
+    await clerkClient.users.updateUserMetadata(clerkUserId, {
+      publicMetadata: { role }
+    });
+  }
+
+  if (name !== undefined) {
+    const { firstName, lastName } = splitName(name || '');
+    await clerkClient.users.updateUser(clerkUserId, {
+      firstName,
+      lastName
+    });
+  }
+};
+
+const migrateLegacyAdminUsers = async () => {
+  const legacyAdmins = await Patient.find({ role: 'admin' });
+  if (!legacyAdmins.length) return;
+
+  for (const legacyAdmin of legacyAdmins) {
+    const existsInAdminDb = await Admin.findOne({
+      $or: [
+        { email: legacyAdmin.email },
+        ...(legacyAdmin.clerkUserId ? [{ clerkUserId: legacyAdmin.clerkUserId }] : [])
+      ]
+    });
+
+    if (!existsInAdminDb) {
+      const payload = toWritablePayload(legacyAdmin.toObject());
+      payload.role = 'admin';
+      await Admin.create(payload);
+    }
+
+    await legacyAdmin.deleteOne();
+  }
+};
+
+const ensureConfiguredAdminAccounts = async () => {
+  const adminEmails = parseAdminEmails();
+  if (!adminEmails.length) return;
+
+  for (const email of adminEmails) {
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      if (existingAdmin.role !== 'admin') {
+        existingAdmin.role = 'admin';
+        await existingAdmin.save();
+      }
+      continue;
+    }
+
+    const existingPatient = await Patient.findOne({ email });
+    if (existingPatient) {
+      const payload = toWritablePayload(existingPatient.toObject());
+      payload.role = 'admin';
+      try {
+        await Admin.create(payload);
+      } catch (error) {
+        if (error?.code !== 11000) {
+          throw error;
+        }
+      }
+      await existingPatient.deleteOne();
+      continue;
+    }
+
+    try {
+      await Admin.create({
+        name: email.split('@')[0] || 'Admin User',
+        email,
+        role: 'admin'
+      });
+    } catch (error) {
+      if (error?.code !== 11000) {
+        throw error;
+      }
+    }
+  }
+};
+
+const resolveCurrentPatient = async (user, profileHints = {}) => {
+  const { adminUser, patientUser } = await findUserByIdentity(user, profileHints);
+  const hintedEmail = normalizeEmail(profileHints?.email);
+  const hintedName = typeof profileHints?.name === 'string' ? profileHints.name.trim() : '';
+  const hintedPhone = typeof profileHints?.phone === 'string' ? profileHints.phone.trim() : '';
+  const claimedRole = normalizeInputRole(user?.role);
+
+  const preferredEmail = normalizeEmail(user?.email) || hintedEmail || `${user?.id || 'anonymous'}@clerk.local`;
+  const shouldBeAdmin =
+    user?.forceAdmin === true ||
+    user?.authType === 'admin' ||
+    user?.role === 'admin' ||
+    Boolean(adminUser) ||
+    isAdminEmail(preferredEmail) ||
+    isAdminClerkUserId(user?.id) ||
+    isAdminClerkUserId(adminUser?.clerkUserId) ||
+    isAdminClerkUserId(patientUser?.clerkUserId);
+
+  const persistAdminPayload = async (candidate, payload) => {
+    let target = candidate;
+    const nextPayload = { ...payload };
+
+    if (nextPayload.clerkUserId) {
+      const clerkOwner = await Admin.findOne({ clerkUserId: nextPayload.clerkUserId });
+      if (clerkOwner && String(clerkOwner._id) !== String(target._id)) {
+        target = clerkOwner;
+      }
+    }
+
+    if (nextPayload.email && nextPayload.email !== target.email) {
+      const emailOwner = await Admin.findOne({ email: nextPayload.email });
+      if (emailOwner && String(emailOwner._id) !== String(target._id)) {
+        delete nextPayload.email;
+      }
+    }
+
+    Object.assign(target, nextPayload);
+
+    try {
+      await target.save();
+      return target;
+    } catch (error) {
+      const isDuplicateClerkKey = error?.code === 11000 && String(error?.message || '').includes('clerkUserId_1');
+      if (!isDuplicateClerkKey || !nextPayload.clerkUserId) {
+        throw error;
+      }
+
+      const clerkOwner = await Admin.findOne({ clerkUserId: nextPayload.clerkUserId });
+      if (!clerkOwner) {
+        throw error;
+      }
+
+      if (nextPayload.email && nextPayload.email !== clerkOwner.email) {
+        const emailOwner = await Admin.findOne({ email: nextPayload.email });
+        if (emailOwner && String(emailOwner._id) !== String(clerkOwner._id)) {
+          delete nextPayload.email;
+        }
+      }
+
+      Object.assign(clerkOwner, nextPayload);
+      await clerkOwner.save();
+      return clerkOwner;
+    }
+  };
+
+  if (shouldBeAdmin) {
+    const sourceUser = adminUser || patientUser;
+    const adminPayload = {
+      ...(sourceUser ? toWritablePayload(sourceUser.toObject()) : {}),
+      name: hintedName || sourceUser?.name || user.name || user.email || user.phone || 'Clerk User',
+      email: preferredEmail,
+      clerkUserId: user?.id,
+      role: 'admin',
+      phone: hintedPhone || sourceUser?.phone || user.phone || undefined
+    };
+
+    let ensuredAdmin = adminUser;
+    if (adminPayload.clerkUserId) {
+      const adminMatchedByClerkId = await Admin.findOne({ clerkUserId: adminPayload.clerkUserId });
+      if (adminMatchedByClerkId) {
+        ensuredAdmin = adminMatchedByClerkId;
+      }
+    }
+
+    if (ensuredAdmin) {
+      ensuredAdmin = await persistAdminPayload(ensuredAdmin, adminPayload);
+    } else {
+      try {
+        ensuredAdmin = await Admin.create(adminPayload);
+      } catch (error) {
+        if (error?.code !== 11000) {
+          throw error;
+        }
+
+        ensuredAdmin = await Admin.findOne({
+          $or: [
+            { email: adminPayload.email },
+            ...(adminPayload.clerkUserId ? [{ clerkUserId: adminPayload.clerkUserId }] : [])
+          ]
+        });
+
+        if (!ensuredAdmin) {
+          throw error;
+        }
+
+        ensuredAdmin = await persistAdminPayload(ensuredAdmin, adminPayload);
+      }
+    }
+
+    if (patientUser) {
+      await patientUser.deleteOne();
+    }
+
+    return ensuredAdmin;
+  }
+
+  if (patientUser) {
     let shouldSave = false;
 
-    if (!patient.clerkUserId) {
-      patient.clerkUserId = user.id;
+    if (!patientUser.clerkUserId && user?.id) {
+      patientUser.clerkUserId = user.id;
       shouldSave = true;
     }
 
-    if (!patient.role) {
-      patient.role = isAdminEmail(patient.email || user.email) ? 'admin' : 'patient';
+    if (patientUser.role === 'admin') {
+      patientUser.role = 'patient';
       shouldSave = true;
     }
 
-    const effectiveEmailForRole = user.email || patient.email;
-    const shouldBeAdmin = isAdminEmail(effectiveEmailForRole) || isAdminClerkUserId(user.id) || isAdminClerkUserId(patient.clerkUserId);
-    if (shouldBeAdmin && patient.role !== 'admin') {
-      patient.role = 'admin';
+    if (claimedRole === 'doctor' && patientUser.role !== 'doctor') {
+      patientUser.role = 'doctor';
       shouldSave = true;
     }
 
-    const hasRealUserEmail = Boolean(user.email && !user.email.endsWith('@clerk.local'));
-    const hasPlaceholderPatientEmail = Boolean(patient.email && patient.email.endsWith('@clerk.local'));
+    const hasRealUserEmail = Boolean(user?.email && !user.email.endsWith('@clerk.local'));
+    const hasPlaceholderPatientEmail = Boolean(patientUser.email && patientUser.email.endsWith('@clerk.local'));
 
     if (hasRealUserEmail && hasPlaceholderPatientEmail) {
-      patient.email = user.email;
+      patientUser.email = normalizeEmail(user?.email);
       shouldSave = true;
     }
 
-    const hintedEmail = typeof profileHints.email === 'string' ? profileHints.email.trim() : '';
     const hasRealHintedEmail = Boolean(hintedEmail && !hintedEmail.endsWith('@clerk.local'));
     if (hasRealHintedEmail && hasPlaceholderPatientEmail) {
-      patient.email = hintedEmail.toLowerCase();
+      patientUser.email = hintedEmail;
       shouldSave = true;
     }
 
-    const hintedName = typeof profileHints.name === 'string' ? profileHints.name.trim() : '';
-    if (hintedName && (!patient.name || patient.name === 'Clerk User')) {
-      patient.name = hintedName;
+    if (hintedName && (!patientUser.name || patientUser.name === 'Clerk User')) {
+      patientUser.name = hintedName;
       shouldSave = true;
     }
 
-    const hintedPhone = typeof profileHints.phone === 'string' ? profileHints.phone.trim() : '';
-    if (hintedPhone && !patient.phone) {
-      patient.phone = hintedPhone;
+    if (hintedPhone && !patientUser.phone) {
+      patientUser.phone = hintedPhone;
       shouldSave = true;
     }
 
     if (shouldSave) {
-      await patient.save();
+      await patientUser.save();
     }
 
-    return patient;
+    return patientUser;
+  }
+
+  if (adminUser) {
+    let shouldSave = false;
+
+    if (!adminUser.clerkUserId && user?.id) {
+      adminUser.clerkUserId = user.id;
+      shouldSave = true;
+    }
+
+    if (adminUser.role !== 'admin') {
+      adminUser.role = 'admin';
+      shouldSave = true;
+    }
+
+    const hasRealUserEmail = Boolean(user?.email && !user.email.endsWith('@clerk.local'));
+    const hasPlaceholderAdminEmail = Boolean(adminUser.email && adminUser.email.endsWith('@clerk.local'));
+
+    if (hasRealUserEmail && hasPlaceholderAdminEmail) {
+      adminUser.email = normalizeEmail(user?.email);
+      shouldSave = true;
+    }
+
+    const hasRealHintedEmail = Boolean(hintedEmail && !hintedEmail.endsWith('@clerk.local'));
+    if (hasRealHintedEmail && hasPlaceholderAdminEmail) {
+      adminUser.email = hintedEmail;
+      shouldSave = true;
+    }
+
+    if (hintedName && (!adminUser.name || adminUser.name === 'Clerk User')) {
+      adminUser.name = hintedName;
+      shouldSave = true;
+    }
+
+    if (hintedPhone && !adminUser.phone) {
+      adminUser.phone = hintedPhone;
+      shouldSave = true;
+    }
+
+    if (shouldSave) {
+      await adminUser.save();
+    }
+
+    return adminUser;
   }
 
   const created = await Patient.create({
-    name: user.name || user.email || user.phone || 'Clerk User',
-    email: user.email || `${user.id}@clerk.local`,
-    role: isAdminEmail(user.email) || isAdminClerkUserId(user.id) ? 'admin' : 'patient',
-    clerkUserId: user.id,
-    phone: user.phone || undefined
+    name: user?.name || user?.email || user?.phone || 'Clerk User',
+    email: preferredEmail,
+    role: claimedRole === 'doctor' ? 'doctor' : 'patient',
+    clerkUserId: user?.id,
+    phone: user?.phone || undefined
   });
+
   return created;
 };
 
 const requireAdmin = async (req, res, next) => {
   try {
-    const currentUser = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!currentUser || currentUser.role !== 'admin') {
+    const profileHints = getProfileHints(req);
+    const hintedEmail = normalizeEmail(profileHints?.email || req.user?.email || '');
+
+    const { adminUser, patientUser } = await findUserByIdentity(req.user, profileHints);
+
+    if (adminUser && adminUser.role === 'admin') {
+      req.currentUser = adminUser;
+      return next();
+    }
+
+    if (patientUser && patientUser.role === 'admin') {
+      req.currentUser = patientUser;
+      return next();
+    }
+
+    const allowedByClaims =
+      req.user?.forceAdmin === true ||
+      req.user?.authType === 'admin' ||
+      req.user?.role === 'admin' ||
+      isAdminClerkUserId(req.user?.id) ||
+      isAdminEmail(hintedEmail);
+
+    if (!allowedByClaims) {
       return res.status(403).json({ message: 'Admin access required' });
     }
 
-    req.currentUser = currentUser;
+    let ensuredAdmin = adminUser;
+
+    if (!ensuredAdmin) {
+      if (hintedEmail) {
+        ensuredAdmin = await Admin.findOne({ email: hintedEmail });
+      }
+
+      if (!ensuredAdmin && req.user?.id) {
+        ensuredAdmin = await Admin.findOne({ clerkUserId: req.user.id });
+      }
+    }
+
+    if (!ensuredAdmin) {
+      const candidateName = profileHints?.name?.trim() || req.user?.name || hintedEmail || 'Admin User';
+      const candidateEmail = hintedEmail || `${req.user?.id || 'admin'}@clerk.local`;
+
+      try {
+        ensuredAdmin = await Admin.create({
+          name: candidateName,
+          email: candidateEmail,
+          clerkUserId: req.user?.id,
+          role: 'admin'
+        });
+      } catch (error) {
+        if (error?.code === 11000) {
+          ensuredAdmin = await Admin.findOne({
+            $or: [
+              { email: candidateEmail },
+              ...(req.user?.id ? [{ clerkUserId: req.user.id }] : [])
+            ]
+          });
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    if (!ensuredAdmin || ensuredAdmin.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+
+    req.currentUser = ensuredAdmin;
     return next();
   } catch (error) {
     return res.status(500).json({ message: 'Failed to validate admin access', error: error.message });
   }
 };
 
-router.post('/register', async (req, res) => {
+const migrateEmbeddedReportsForAccount = async (account) => {
+  if (!account || account.role !== 'patient' || !Array.isArray(account.reports) || !account.reports.length) {
+    return;
+  }
+
+  const operations = account.reports
+    .filter((item) => item?._id && item?.fileName && item?.filePath)
+    .map((item) => ({
+      updateOne: {
+        filter: {
+          patientId: account._id,
+          legacyReportId: String(item._id)
+        },
+        update: {
+          $setOnInsert: {
+            patientId: account._id,
+            patientEmail: account.email,
+            patientName: account.name,
+            title: item.title,
+            description: item.description,
+            fileName: item.fileName,
+            filePath: item.filePath,
+            mimeType: item.mimeType,
+            size: item.size,
+            uploadedAt: item.uploadedAt || new Date(),
+            legacyReportId: String(item._id)
+          }
+        },
+        upsert: true
+      }
+    }));
+
+  if (operations.length) {
+    await Report.bulkWrite(operations, { ordered: false });
+  }
+
+  account.reports = [];
+  await account.save();
+};
+
+const listReportsForAccount = async (account) => {
+  await migrateEmbeddedReportsForAccount(account);
+  return Report.find({ patientId: account._id }).sort({ uploadedAt: -1, _id: -1 });
+};
+
+router.post('/register', async (_req, res) => {
   return res.status(410).json({ message: 'This service uses Clerk authentication. Sign up from the client app.' });
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', async (_req, res) => {
   return res.status(410).json({ message: 'This service uses Clerk authentication. Sign in from the client app.' });
 });
 
 router.get('/profile', authMiddleware, async (req, res) => {
   try {
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient profile not found' });
+    try {
+      await ensureConfiguredAdminAccounts();
+    } catch (bootstrapError) {
+      console.warn('[patient-service] admin bootstrap warning:', bootstrapError.message);
     }
 
-    return res.json({ patient: sanitizePatient(patient) });
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+
+    const source = account.role === 'admin' ? 'admin-db' : 'patient-db';
+    return res.json({ patient: sanitizeUser(account, source) });
   } catch (error) {
+    try {
+      const hintedEmail = normalizeEmail(getProfileHints(req)?.email || req.user?.email || '');
+      if (hintedEmail) {
+        const fallbackAdmin = await Admin.findOne({ email: hintedEmail });
+        if (fallbackAdmin) {
+          return res.json({ patient: sanitizeUser(fallbackAdmin, 'admin-db') });
+        }
+
+        const fallbackPatient = await Patient.findOne({ email: hintedEmail });
+        if (fallbackPatient) {
+          return res.json({ patient: sanitizeUser(fallbackPatient, 'patient-db') });
+        }
+      }
+    } catch {
+    }
+
     return res.status(500).json({ message: 'Failed to fetch profile', error: error.message });
   }
 });
@@ -304,39 +758,110 @@ router.get('/profile', authMiddleware, async (req, res) => {
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const updates = (({ name, phone, age, gender, address }) => ({ name, phone, age, gender, address }))(req.body);
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
 
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient profile not found' });
+    if (updates.gender !== undefined) {
+      const normalizedGender = String(updates.gender || '').trim().toLowerCase();
+      if (!normalizedGender) {
+        updates.gender = undefined;
+      } else if (['male', 'female', 'other'].includes(normalizedGender)) {
+        updates.gender = normalizedGender;
+      } else {
+        return res.status(400).json({ message: 'Invalid gender value. Use male, female, or other.' });
+      }
+    }
+
+    if (updates.age !== undefined) {
+      if (updates.age === '' || updates.age === null) {
+        updates.age = undefined;
+      } else {
+        const parsedAge = Number(updates.age);
+        if (!Number.isFinite(parsedAge) || parsedAge < 0) {
+          return res.status(400).json({ message: 'Invalid age value.' });
+        }
+        updates.age = parsedAge;
+      }
+    }
+
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+
+    if (!account) {
+      return res.status(404).json({ message: 'Profile not found' });
     }
 
     Object.entries(updates).forEach(([key, value]) => {
       if (value !== undefined) {
-        patient[key] = value;
+        account[key] = value;
       }
     });
 
-    await patient.save();
+    await account.save();
 
-    const clerkClient = getClerkClient();
-    if (clerkClient && updates.name !== undefined) {
-      const { firstName, lastName } = splitName(updates.name);
-      await clerkClient.users.updateUser(req.user.id, {
-        firstName,
-        lastName
-      });
+    if (updates.name !== undefined) {
+      try {
+        await syncClerkMetadata(req.user.id, null, updates.name);
+      } catch (syncError) {
+        console.warn('[patient-service] clerk profile sync warning:', syncError.message);
+      }
     }
 
-    return res.json({ message: 'Profile updated successfully', patient: sanitizePatient(patient) });
+    const source = account.role === 'admin' ? 'admin-db' : 'patient-db';
+    return res.json({ message: 'Profile updated successfully', patient: sanitizeUser(account, source) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to update profile', error: error.message });
   }
 });
 
+router.post('/profile/image', authMiddleware, profileImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Profile image file is required (field: image).' });
+    }
+
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+
+    const previousPath = account.image;
+    account.image = `/uploads/profiles/${req.file.filename}`;
+    await account.save();
+
+    if (previousPath && String(previousPath).startsWith('/uploads/profiles/')) {
+      const absolutePreviousPath = path.join(__dirname, '..', previousPath.replace(/^\/+/, ''));
+      if (fs.existsSync(absolutePreviousPath)) {
+        try {
+          fs.unlinkSync(absolutePreviousPath);
+        } catch {
+        }
+      }
+    }
+
+    const source = account.role === 'admin' ? 'admin-db' : 'patient-db';
+    return res.json({
+      message: 'Profile image updated successfully',
+      patient: sanitizeUser(account, source)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to upload profile image', error: error.message });
+  }
+});
+
 router.get('/admin/users', authMiddleware, requireAdmin, async (_req, res) => {
   try {
-    const users = await Patient.find({}).sort({ createdAt: -1 });
-    return res.json({ users: users.map(sanitizePatient) });
+    await migrateLegacyAdminUsers();
+    await ensureConfiguredAdminAccounts();
+
+    const [patients, admins] = await Promise.all([
+      Patient.find({ role: { $ne: 'admin' } }).sort({ createdAt: -1 }),
+      Admin.find({}).sort({ createdAt: -1 })
+    ]);
+
+    const users = [
+      ...patients.map((item) => sanitizeUser(item, 'patient-db')),
+      ...admins.map((item) => sanitizeUser(item, 'admin-db'))
+    ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+    return res.json({ users });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to fetch users', error: error.message });
   }
@@ -358,16 +883,23 @@ router.post('/admin/users', authMiddleware, requireAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Invalid role. Allowed roles: patient, doctor, admin.' });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const normalizedUsername = normalizeClerkUsername(username);
+    const normalizedRole = normalizeInputRole(role);
 
-    const existing = await Patient.findOne({ email: normalizedEmail });
-    if (existing) {
+    const [existingPatientByEmail, existingAdminByEmail] = await Promise.all([
+      Patient.findOne({ email: normalizedEmail }),
+      Admin.findOne({ email: normalizedEmail })
+    ]);
+    if (existingPatientByEmail || existingAdminByEmail) {
       return res.status(409).json({ message: 'User with this email already exists' });
     }
 
-    const existingUsername = await Patient.findOne({ username: normalizedUsername });
-    if (existingUsername) {
+    const [existingPatientUsername, existingAdminUsername] = await Promise.all([
+      Patient.findOne({ username: normalizedUsername }),
+      Admin.findOne({ username: normalizedUsername })
+    ]);
+    if (existingPatientUsername || existingAdminUsername) {
       return res.status(409).json({ message: 'User with this username already exists' });
     }
 
@@ -386,7 +918,7 @@ router.post('/admin/users', authMiddleware, requireAdmin, async (req, res) => {
         password,
         firstName,
         lastName,
-        role,
+        role: normalizedRole,
         username: normalizedUsername
       });
     } catch (clerkError) {
@@ -397,14 +929,20 @@ router.post('/admin/users', authMiddleware, requireAdmin, async (req, res) => {
 
     let created;
     try {
-      created = await Patient.create({
+      const payload = {
         name: String(name).trim(),
         username: clerkUser.username || normalizedUsername,
         email: normalizedEmail,
-        role,
+        role: normalizedRole,
         phone: phone ? String(phone).trim() : undefined,
         clerkUserId: clerkUser.id
-      });
+      };
+
+      if (normalizedRole === 'admin') {
+        created = await Admin.create({ ...payload, role: 'admin' });
+      } else {
+        created = await Patient.create(payload);
+      }
     } catch (dbError) {
       try {
         await clerkClient.users.deleteUser(clerkUser.id);
@@ -413,7 +951,8 @@ router.post('/admin/users', authMiddleware, requireAdmin, async (req, res) => {
       throw dbError;
     }
 
-    return res.status(201).json({ message: 'User created successfully', user: sanitizePatient(created) });
+    const source = normalizedRole === 'admin' ? 'admin-db' : 'patient-db';
+    return res.status(201).json({ message: 'User created successfully', user: sanitizeUser(created, source) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to create user', error: error.message });
   }
@@ -424,8 +963,8 @@ router.patch('/admin/users/:userId', authMiddleware, requireAdmin, async (req, r
     const { userId } = req.params;
     const updates = (({ name, email, role, phone, age, gender, address }) => ({ name, email, role, phone, age, gender, address }))(req.body);
 
-    const user = await Patient.findById(userId);
-    if (!user) {
+    const found = await findUserByIdAcrossStores(userId);
+    if (!found.user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
@@ -433,11 +972,18 @@ router.patch('/admin/users/:userId', authMiddleware, requireAdmin, async (req, r
       return res.status(400).json({ message: 'Invalid role. Allowed roles: patient, doctor, admin.' });
     }
 
+    const currentUser = found.user;
+    const currentSource = found.source;
+    const targetRole = updates.role !== undefined ? normalizeInputRole(updates.role) : normalizeInputRole(currentUser.role);
+
     if (updates.email !== undefined) {
-      updates.email = String(updates.email).trim().toLowerCase();
-      if (updates.email !== user.email) {
-        const existing = await Patient.findOne({ email: updates.email, _id: { $ne: user._id } });
-        if (existing) {
+      updates.email = normalizeEmail(updates.email);
+      if (updates.email !== currentUser.email) {
+        const [patientEmailConflict, adminEmailConflict] = await Promise.all([
+          Patient.findOne({ email: updates.email, _id: { $ne: currentUser._id } }),
+          Admin.findOne({ email: updates.email, _id: { $ne: currentUser._id } })
+        ]);
+        if (patientEmailConflict || adminEmailConflict) {
           return res.status(409).json({ message: 'Another user already uses this email' });
         }
       }
@@ -445,30 +991,33 @@ router.patch('/admin/users/:userId', authMiddleware, requireAdmin, async (req, r
 
     Object.entries(updates).forEach(([key, value]) => {
       if (value !== undefined) {
-        user[key] = value;
+        currentUser[key] = value;
       }
     });
 
-    await user.save();
+    let updatedUser = currentUser;
+    let updatedSource = currentSource;
 
-    const clerkClient = getClerkClient();
-    if (clerkClient && user.clerkUserId) {
-      if (updates.role !== undefined) {
-        await clerkClient.users.updateUserMetadata(user.clerkUserId, {
-          publicMetadata: { role: user.role }
-        });
-      }
-
-      if (updates.name !== undefined) {
-        const { firstName, lastName } = splitName(user.name);
-        await clerkClient.users.updateUser(user.clerkUserId, {
-          firstName,
-          lastName
-        });
-      }
+    if (currentSource === 'patient-db' && targetRole === 'admin') {
+      const payload = toWritablePayload(currentUser.toObject());
+      payload.role = 'admin';
+      updatedUser = await Admin.create(payload);
+      await currentUser.deleteOne();
+      updatedSource = 'admin-db';
+    } else if (currentSource === 'admin-db' && targetRole !== 'admin') {
+      const payload = toWritablePayload(currentUser.toObject());
+      payload.role = targetRole;
+      updatedUser = await Patient.create(payload);
+      await currentUser.deleteOne();
+      updatedSource = 'patient-db';
+    } else {
+      updatedUser.role = updatedSource === 'admin-db' ? 'admin' : targetRole;
+      await updatedUser.save();
     }
 
-    return res.json({ message: 'User updated successfully', user: sanitizePatient(user) });
+    await syncClerkMetadata(updatedUser.clerkUserId, updatedUser.role, updates.name !== undefined ? updatedUser.name : undefined);
+
+    return res.json({ message: 'User updated successfully', user: sanitizeUser(updatedUser, updatedSource) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to update user', error: error.message });
   }
@@ -482,12 +1031,12 @@ router.delete('/admin/users/:userId', authMiddleware, requireAdmin, async (req, 
       return res.status(400).json({ message: 'Admin cannot delete own account' });
     }
 
-    const user = await Patient.findById(userId);
-    if (!user) {
+    const found = await findUserByIdAcrossStores(userId);
+    if (!found.user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    for (const report of user.reports || []) {
+    for (const report of found.user.reports || []) {
       const reportPath = report.filePath?.replace(/^\/+/, '');
       if (reportPath) {
         const absolutePath = path.join(__dirname, '..', reportPath);
@@ -501,7 +1050,7 @@ router.delete('/admin/users/:userId', authMiddleware, requireAdmin, async (req, 
       }
     }
 
-    await user.deleteOne();
+    await found.user.deleteOne();
 
     return res.json({ message: 'User deleted successfully' });
   } catch (error) {
@@ -518,24 +1067,61 @@ router.patch('/admin/users/:userId/role', authMiddleware, requireAdmin, async (r
       return res.status(400).json({ message: 'Invalid role. Allowed roles: patient, doctor, admin.' });
     }
 
-    const user = await Patient.findById(userId);
-    if (!user) {
+    const found = await findUserByIdAcrossStores(userId);
+    if (!found.user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    user.role = role;
-    await user.save();
+    const targetRole = normalizeInputRole(role);
+    let updatedUser = found.user;
+    let updatedSource = found.source;
 
-    const clerkClient = getClerkClient();
-    if (clerkClient && user.clerkUserId) {
-      await clerkClient.users.updateUserMetadata(user.clerkUserId, {
-        publicMetadata: { role }
-      });
+    if (found.source === 'patient-db' && targetRole === 'admin') {
+      const payload = toWritablePayload(found.user.toObject());
+      payload.role = 'admin';
+      updatedUser = await Admin.create(payload);
+      await found.user.deleteOne();
+      updatedSource = 'admin-db';
+    } else if (found.source === 'admin-db' && targetRole !== 'admin') {
+      const payload = toWritablePayload(found.user.toObject());
+      payload.role = targetRole;
+      updatedUser = await Patient.create(payload);
+      await found.user.deleteOne();
+      updatedSource = 'patient-db';
+    } else {
+      updatedUser.role = updatedSource === 'admin-db' ? 'admin' : targetRole;
+      await updatedUser.save();
     }
 
-    return res.json({ message: 'User role updated successfully', user: sanitizePatient(user) });
+    await syncClerkMetadata(updatedUser.clerkUserId, updatedUser.role);
+
+    return res.json({ message: 'User role updated successfully', user: sanitizeUser(updatedUser, updatedSource) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to update user role', error: error.message });
+  }
+});
+
+router.post('/admin/migrate-legacy-users', authMiddleware, requireAdmin, async (_req, res) => {
+  try {
+    const migration = await migrateLegacyUsersToDomainCollections();
+    return res.json({
+      message: 'Legacy user migration completed',
+      migration
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to migrate legacy users', error: error.message });
+  }
+});
+
+router.post('/admin/cleanup-test-dbs', authMiddleware, requireAdmin, async (_req, res) => {
+  try {
+    const cleanup = await dropLegacyTestDatabases();
+    return res.json({
+      message: 'Test database cleanup completed',
+      cleanup
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to cleanup test databases', error: error.message });
   }
 });
 
@@ -545,24 +1131,26 @@ router.post('/reports', authMiddleware, upload.single('report'), async (req, res
       return res.status(400).json({ message: 'report file is required (field: report)' });
     }
 
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient profile not found' });
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account || account.role !== 'patient') {
+      return res.status(403).json({ message: 'Reports are only available for patient accounts' });
     }
 
-    const report = {
+    await migrateEmbeddedReportsForAccount(account);
+
+    const report = await Report.create({
+      patientId: account._id,
+      patientEmail: account.email,
+      patientName: account.name,
       title: req.body.title,
       description: req.body.description,
       fileName: req.file.filename,
       filePath: `/uploads/reports/${req.file.filename}`,
       mimeType: req.file.mimetype,
       size: req.file.size
-    };
+    });
 
-    patient.reports.push(report);
-    await patient.save();
-
-    return res.status(201).json({ message: 'Report uploaded successfully', report: patient.reports[patient.reports.length - 1] });
+    return res.status(201).json({ message: 'Report uploaded successfully', report });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to upload report', error: error.message });
   }
@@ -570,12 +1158,13 @@ router.post('/reports', authMiddleware, upload.single('report'), async (req, res
 
 router.get('/reports', authMiddleware, async (req, res) => {
   try {
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient profile not found' });
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account || account.role !== 'patient') {
+      return res.status(403).json({ message: 'Reports are only available for patient accounts' });
     }
 
-    return res.json({ reports: patient.reports || [] });
+    const reports = await listReportsForAccount(account);
+    return res.json({ reports });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to fetch reports', error: error.message });
   }
@@ -586,12 +1175,14 @@ router.patch('/reports/:reportId', authMiddleware, async (req, res) => {
     const { reportId } = req.params;
     const { title, description } = req.body;
 
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient profile not found' });
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account || account.role !== 'patient') {
+      return res.status(403).json({ message: 'Reports are only available for patient accounts' });
     }
 
-    const report = patient.reports.id(reportId);
+    await migrateEmbeddedReportsForAccount(account);
+
+    const report = await Report.findOne({ _id: reportId, patientId: account._id });
     if (!report) {
       return res.status(404).json({ message: 'Report not found' });
     }
@@ -599,11 +1190,10 @@ router.patch('/reports/:reportId', authMiddleware, async (req, res) => {
     if (title !== undefined) report.title = title;
     if (description !== undefined) report.description = description;
 
-    await patient.save();
+    await report.save();
 
     return res.json({ message: 'Report updated successfully', report });
   } catch (error) {
-    console.error('Failed to update report:', error);
     return res.status(500).json({ message: 'Failed to update report', error: error.message });
   }
 });
@@ -612,12 +1202,14 @@ router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
   try {
     const { reportId } = req.params;
 
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient profile not found' });
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account || account.role !== 'patient') {
+      return res.status(403).json({ message: 'Reports are only available for patient accounts' });
     }
 
-    const report = patient.reports.id(reportId);
+    await migrateEmbeddedReportsForAccount(account);
+
+    const report = await Report.findOne({ _id: reportId, patientId: account._id });
     if (!report) {
       return res.status(404).json({ message: 'Report not found' });
     }
@@ -634,26 +1226,24 @@ router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
       }
     }
 
-    patient.reports = patient.reports.filter((item) => item._id.toString() !== reportId);
-    await patient.save();
+    await report.deleteOne();
 
     return res.json({ message: 'Report deleted successfully' });
   } catch (error) {
-    console.error('Failed to delete report:', error);
     return res.status(500).json({ message: 'Failed to delete report', error: error.message });
   }
 });
 
 router.get('/notifications', authMiddleware, async (req, res) => {
   try {
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account) {
       return res.status(404).json({ message: 'Patient profile not found' });
     }
-    const data = await listNotificationsForRecipient(patient._id, 'patient');
+    const role = account.role === 'admin' ? 'admin' : 'patient';
+    const data = await listNotificationsForRecipient(account._id, role);
     return res.json(data);
   } catch (error) {
-    console.error('[patient] notifications list', error.message);
     return res.json({ success: true, unreadCount: 0, notifications: [] });
   }
 });
@@ -661,37 +1251,67 @@ router.get('/notifications', authMiddleware, async (req, res) => {
 router.patch('/notifications/:notificationId/read', authMiddleware, async (req, res) => {
   try {
     const { notificationId } = req.params;
-    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
-    if (!patient) {
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account) {
       return res.status(404).json({ message: 'Patient profile not found' });
     }
-    await markNotificationReadInternal(notificationId, patient._id, 'patient');
+    const role = account.role === 'admin' ? 'admin' : 'patient';
+    await markNotificationReadInternal(notificationId, account._id, role);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to update notification' });
   }
 });
 
-// Internal lookup for notification service
 router.get('/emails/:id', async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).select('email');
-    if (!patient) {
+    const [patient, admin] = await Promise.all([
+      Patient.findById(req.params.id).select('email'),
+      Admin.findById(req.params.id).select('email')
+    ]);
+    const account = patient || admin;
+    if (!account) {
       return res.status(404).json({ message: 'Patient not found' });
     }
-    res.json({ email: patient.email });
+    res.json({ email: account.email });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/prescriptions', authMiddleware, async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).select('name email');
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
     if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+
+    const response = await axios.get(`${DOCTOR_SERVICE_URL}/api/doctor/internal/patient-prescriptions`, {
+      params: { patientId: patient._id }
+    });
+
+    if (!response.data?.success) {
+      return res.status(500).json({ message: response.data?.message || 'Failed to fetch prescriptions' });
+    }
+
+    return res.json({ prescriptions: response.data.prescriptions || [] });
+  } catch (error) {
+    console.error('[patient] prescriptions list', error.message);
+    return res.status(500).json({ message: error.message || 'Failed to fetch prescriptions' });
+  }
+});
+
+router.get('/:id([a-fA-F0-9]{24})', async (req, res) => {
+  try {
+    const [patient, admin] = await Promise.all([
+      Patient.findById(req.params.id).select('name email role'),
+      Admin.findById(req.params.id).select('name email role')
+    ]);
+    const account = patient || admin;
+    if (!account) {
       return res.status(404).json({ message: 'Patient not found' });
     }
-    res.json(patient);
+    res.json(account);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

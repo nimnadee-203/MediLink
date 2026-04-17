@@ -9,6 +9,9 @@ services:
       - PATIENT_SERVICE_URL=http://patient-service:8002
       - APPOINTMENT_SERVICE_URL=http://appointment-service:8004
       - DOCTOR_SERVICE_URL=http://doctor-service:4000
+      - TELEMEDICINE_SERVICE_URL=http://telemedicine-service:8007
+      - SYMPTOM_CHECKER_SERVICE_URL=http://symptom-checker-service:8010
+      - PAYMENT_SERVICE_URL=http://payment-service:8019
       - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
     depends_on:
       - auth-service
@@ -17,6 +20,7 @@ services:
       - doctor-service
       - notification-service
       - payment-service
+      - symptom-checker-service
     networks:
       - medilink-network
 
@@ -41,6 +45,9 @@ services:
     environment:
       - PORT=8002
       - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - DOCTOR_SERVICE_URL=http://doctor-service:4000
+      - PATIENT_DB_NAME=patients
+      - ADMIN_DB_NAME=admin_1
       - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/patients?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
@@ -64,8 +71,10 @@ services:
     env_file: ./services/doctor-service/.env
     environment:
       - PORT=4000
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
       - NOTIFICATION_SERVICE_URL=http://notification-service:8006
       - APPOINTMENT_DB_NAME=appointments
+      - DOCTOR_DB_NAME=doctors
       - PATIENT_DB_NAME=patients
       - APPOINTMENT_SERVICE_URL=http://appointment-service:8004
       - PATIENT_SERVICE_URL=http://patient-service:8002
@@ -100,9 +109,9 @@ services:
   symptom-checker-service:
     build: ./services/symptom-checker-service
     ports:
-      - "8007:8007"
+      - "8010:8010"
     environment:
-      - PORT=8007
+      - PORT=8010
       - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/symptom_checker?retryWrites=true&w=majority&appName=MediLink
     networks:
       - medilink-network
