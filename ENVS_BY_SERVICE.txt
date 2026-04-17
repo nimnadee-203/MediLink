@@ -134,7 +134,7 @@ STRIPE_WEBHOOK_SECRET=whsec_replace_with_webhook_secret
 SERVICE: symptom-checker-service
 TOPICS: server-port, database
 ==================================================
-PORT=8007
+PORT=8010
 MONGO_URI=mongodb://localhost:27017
 MONGO_DB_NAME=symptom-checker
 

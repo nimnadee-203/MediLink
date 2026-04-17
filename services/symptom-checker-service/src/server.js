@@ -6,7 +6,7 @@ import checkerRoutes from './routes/checker.routes.js';
 dotenv.config();
 
 const app = express();
-const port = Number(process.env.PORT) || 8007;
+const port = Number(process.env.PORT) || 8010;
 
 // Enable CORS
 app.use((req, res, next) => {
@@ -26,6 +26,8 @@ app.get('/', (req, res) => {
 });
 
 app.use('/checker', checkerRoutes);
+// Also serve at /history and /analyze so bare bases (e.g. http://host:8010) and stripped proxy paths work.
+app.use(checkerRoutes);
 
 const startServer = async () => {
     await connectDB();

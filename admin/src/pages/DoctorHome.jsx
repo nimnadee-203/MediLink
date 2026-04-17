@@ -38,8 +38,20 @@ function formatDoctorDisplayName(name, fallback = 'Doctor') {
   return `Dr. ${baseName}`;
 }
 
+function appointmentRecordId(appointment) {
+  return String(appointment?._id || appointment?.id || '');
+}
+
+const emptyMedicationRow = () => ({
+  drugName: '',
+  dosage: '',
+  frequency: '',
+  duration: '',
+  notes: ''
+});
+
 const DoctorHome = () => {
-  const { backendUrl, getDoctorAuthHeaders, logout, isDoctorUser } = useContext(AdminContext);
+  const { backendUrl, getDoctorAuthHeaders, logout, isDoctorUser, dToken } = useContext(AdminContext);
   const jitsiContainerRef = useRef(null);
   const jitsiApiRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +72,15 @@ const DoctorHome = () => {
   const [actionLoadingId, setActionLoadingId] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [completedAppointments, setCompletedAppointments] = useState([]);
+  const [rxSelectedId, setRxSelectedId] = useState('');
+  const [rxMedications, setRxMedications] = useState([emptyMedicationRow()]);
+  const [rxGeneralInstructions, setRxGeneralInstructions] = useState('');
+  const [rxExisting, setRxExisting] = useState([]);
+  const [rxLoading, setRxLoading] = useState(false);
+  const [rxSaving, setRxSaving] = useState(false);
+  const [rxError, setRxError] = useState('');
+  const [rxSuccess, setRxSuccess] = useState('');
 
   const onLogout = () => {
     logout();
@@ -95,9 +116,10 @@ const DoctorHome = () => {
       setLoading(true);
       setError('');
       const headers = await getDoctorAuthHeaders();
-      const { data } = await axios.get(`${backendUrl}/api/doctor/appointments/upcoming`, {
-        headers
-      });
+      const [{ data }, { data: completedPayload }] = await Promise.all([
+        axios.get(`${backendUrl}/api/doctor/appointments/upcoming`, { headers }),
+        axios.get(`${backendUrl}/api/doctor/appointments/completed`, { headers })
+      ]);
 
       if (!data.success) {
         throw new Error(data.message || 'Failed to load doctor home');
@@ -106,9 +128,17 @@ const DoctorHome = () => {
       setDoctor(data.doctor || null);
       setStats(data.stats || { todayAppointments: 0, pendingAppointments: 0, completedToday: 0 });
       setUpcomingAppointments(Array.isArray(data.upcomingAppointments) ? data.upcomingAppointments : []);
+      if (completedPayload?.success) {
+        setCompletedAppointments(
+          Array.isArray(completedPayload.completedAppointments) ? completedPayload.completedAppointments : []
+        );
+      } else {
+        setCompletedAppointments([]);
+      }
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to load doctor home');
       setUpcomingAppointments([]);
+      setCompletedAppointments([]);
     } finally {
       setLoading(false);
     }
@@ -121,6 +151,41 @@ const DoctorHome = () => {
     }
     loadDoctorHome();
   }, [isDoctorUser, getDoctorAuthHeaders, backendUrl]);
+
+  useEffect(() => {
+    if (!rxSelectedId || !isDoctorUser) {
+      setRxExisting([]);
+      return;
+    }
+
+    let cancelled = false;
+    setRxMedications([emptyMedicationRow()]);
+    setRxGeneralInstructions('');
+    setRxError('');
+    setRxSuccess('');
+
+    (async () => {
+      setRxLoading(true);
+      try {
+        const headers = await getDoctorAuthHeaders();
+        const { data } = await axios.get(`${backendUrl}/api/doctor/prescriptions`, {
+          headers,
+          params: { appointmentId: rxSelectedId }
+        });
+        if (!cancelled && data?.success) {
+          setRxExisting(data.prescriptions || []);
+        }
+      } catch {
+        if (!cancelled) setRxExisting([]);
+      } finally {
+        if (!cancelled) setRxLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rxSelectedId, isDoctorUser, backendUrl, getDoctorAuthHeaders]);
 
   const upcomingSummary = useMemo(() => {
     if (upcomingAppointments.length === 0) return 'No upcoming appointments.';
@@ -188,9 +253,60 @@ const DoctorHome = () => {
   };
 
   const buildRoomName = (appointment) => {
-    const id = String(appointment?._id || appointment?.id || 'session');
+    const id = appointmentRecordId(appointment) || 'session';
     const safeId = id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || 'session';
     return `MediLink-${safeId}`;
+  };
+
+  const updateRxMedicationRow = (index, field, value) => {
+    setRxMedications((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  };
+
+  const addRxMedicationRow = () => {
+    setRxMedications((rows) => [...rows, emptyMedicationRow()]);
+  };
+
+  const removeRxMedicationRow = (index) => {
+    setRxMedications((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
+  };
+
+  const submitPrescription = async () => {
+    if (!rxSelectedId) {
+      setRxError('Select a completed appointment first.');
+      return;
+    }
+    setRxSaving(true);
+    setRxError('');
+    setRxSuccess('');
+    try {
+      const headers = await getDoctorAuthHeaders();
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/prescriptions`,
+        {
+          appointmentId: rxSelectedId,
+          medications: rxMedications,
+          generalInstructions: rxGeneralInstructions
+        },
+        { headers: { ...headers, 'Content-Type': 'application/json' } }
+      );
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to save prescription');
+      }
+      setRxSuccess('Prescription saved. The patient will see it in their portal.');
+      setRxMedications([emptyMedicationRow()]);
+      setRxGeneralInstructions('');
+      const list = await axios.get(`${backendUrl}/api/doctor/prescriptions`, {
+        headers,
+        params: { appointmentId: rxSelectedId }
+      });
+      if (list.data?.success) {
+        setRxExisting(list.data.prescriptions || []);
+      }
+    } catch (err) {
+      setRxError(err.response?.data?.message || err.message || 'Failed to save prescription');
+    } finally {
+      setRxSaving(false);
+    }
   };
 
   const waitForJitsiContainer = () =>
@@ -223,7 +339,7 @@ const DoctorHome = () => {
     }
 
     try {
-      setJoiningAppointmentId(appointment._id);
+      setJoiningAppointmentId(appointmentRecordId(appointment));
       setSessionError('');
       await loadJitsiScript();
 
@@ -232,7 +348,7 @@ const DoctorHome = () => {
         jitsiApiRef.current = null;
       }
 
-      setLiveAppointmentId(appointment._id);
+      setLiveAppointmentId(appointmentRecordId(appointment));
       goToSection('session');
       const parentNode = await waitForJitsiContainer();
 
@@ -318,7 +434,7 @@ const DoctorHome = () => {
       setActionMessage(data.message || `Appointment ${action}d successfully`);
 
       await loadDoctorHome();
-      if (selectedAppointment?._id === appointmentId) {
+      if (appointmentRecordId(selectedAppointment) === String(appointmentId)) {
         const refreshed = await axios.get(`${backendUrl}/api/doctor/appointments/${appointmentId}`, {
           headers
         });
@@ -385,6 +501,14 @@ const DoctorHome = () => {
           >
             <span>Upcoming Queue</span>
             <small>{upcomingAppointments.length}</small>
+          </button>
+          <button
+            type="button"
+            className={`doctor-nav-item ${activeSection === 'prescriptions' ? 'active' : ''}`}
+            onClick={() => goToSection('prescriptions')}
+          >
+            <span>Prescriptions</span>
+            <small>{completedAppointments.length}</small>
           </button>
         </aside>
 
@@ -485,8 +609,10 @@ const DoctorHome = () => {
                 {actionMessage && <p className="success-text">{actionMessage}</p>}
                 {sessionError && !liveAppointmentId && <p className="error-text">{sessionError}</p>}
                 <ul>
-                  {upcomingAppointments.map((apt) => (
-                    <li key={apt._id} className="doctor-home-appointment-item clickable" onClick={() => viewAppointmentDetails(apt._id)}>
+                  {upcomingAppointments.map((apt) => {
+                    const aid = appointmentRecordId(apt);
+                    return (
+                    <li key={aid} className="doctor-home-appointment-item clickable" onClick={() => viewAppointmentDetails(aid)}>
                       <div>
                         <strong>{formatTime12h(apt.slotTime)}</strong>
                         <span>{formatDate(apt.slotDate)} ┬╖ Rs. {Number(apt.amount || 0).toLocaleString()}</span>
@@ -505,9 +631,9 @@ const DoctorHome = () => {
                               e.stopPropagation();
                               joinTelemedicine(apt);
                             }}
-                            disabled={joiningAppointmentId === apt._id}
+                            disabled={joiningAppointmentId === aid}
                           >
-                            {joiningAppointmentId === apt._id ? 'Joining...' : 'Join Jitsi'}
+                            {joiningAppointmentId === aid ? 'Joining...' : 'Join Jitsi'}
                           </button>
                         )}
                         <div className="doctor-row-actions">
@@ -516,51 +642,212 @@ const DoctorHome = () => {
                             className="row-action-btn view"
                             onClick={(e) => {
                               e.stopPropagation();
-                              viewAppointmentDetails(apt._id);
+                              viewAppointmentDetails(aid);
                             }}
-                            disabled={detailsLoadingId === apt._id}
+                            disabled={detailsLoadingId === aid}
                           >
-                            {detailsLoadingId === apt._id ? 'Loading...' : 'View'}
+                            {detailsLoadingId === aid ? 'Loading...' : 'View'}
                           </button>
                           <button
                             type="button"
                             className="row-action-btn approve"
                             onClick={(e) => {
                               e.stopPropagation();
-                              runAppointmentAction(apt._id, 'approve');
+                              runAppointmentAction(aid, 'approve');
                             }}
-                            disabled={actionLoadingId === `${apt._id}approve` || !['pending', 'confirmed'].includes(apt.status)}
+                            disabled={actionLoadingId === `${aid}approve` || !['pending', 'confirmed'].includes(apt.status)}
                           >
-                            {actionLoadingId === `${apt._id}approve` ? 'Approving...' : 'Approve'}
+                            {actionLoadingId === `${aid}approve` ? 'Approving...' : 'Approve'}
                           </button>
                           <button
                             type="button"
                             className="row-action-btn approve"
                             onClick={(e) => {
                               e.stopPropagation();
-                              runAppointmentAction(apt._id, 'complete');
+                              runAppointmentAction(aid, 'complete');
                             }}
-                            disabled={actionLoadingId === `${apt._id}complete` || apt.status !== 'confirmed'}
+                            disabled={actionLoadingId === `${aid}complete` || apt.status !== 'confirmed'}
                           >
-                            {actionLoadingId === `${apt._id}complete` ? 'Completing...' : 'Mark Completed'}
+                            {actionLoadingId === `${aid}complete` ? 'Completing...' : 'Mark Completed'}
                           </button>
                           <button
                             type="button"
                             className="row-action-btn cancel"
                             onClick={(e) => {
                               e.stopPropagation();
-                              runAppointmentAction(apt._id, 'cancel');
+                              runAppointmentAction(aid, 'cancel');
                             }}
-                            disabled={actionLoadingId === `${apt._id}cancel` || !['pending', 'confirmed'].includes(apt.status)}
+                            disabled={actionLoadingId === `${aid}cancel` || !['pending', 'confirmed'].includes(apt.status)}
                           >
-                            {actionLoadingId === `${apt._id}cancel` ? 'Cancelling...' : 'Cancel'}
+                            {actionLoadingId === `${aid}cancel` ? 'Cancelling...' : 'Cancel'}
                           </button>
                         </div>
                       </div>
                     </li>
-                  ))}
+                  );})}
                 </ul>
               </>
+            )}
+          </div>
+
+          <div id="doctor-section-prescriptions" className="card doctor-home-list doctor-prescriptions-section">
+            <div className="doctor-chart-header">
+              <h3>Prescriptions</h3>
+              <p>Issue medications for visits you have marked as completed.</p>
+            </div>
+            {loading ? (
+              <p className="text-muted">Loading appointments...</p>
+            ) : completedAppointments.length === 0 ? (
+              <p className="text-muted">
+                No completed appointments yet. Mark a visit as completed in the queue, then return here to add a prescription.
+              </p>
+            ) : (
+              <div className="doctor-prescriptions-layout">
+                <div className="doctor-prescription-panel">
+                  <h4>Completed visits</h4>
+                  {completedAppointments.map((apt) => {
+                    const aid = appointmentRecordId(apt);
+                    return (
+                      <button
+                        key={aid}
+                        type="button"
+                        className={`doctor-prescription-item ${rxSelectedId === aid ? 'selected' : ''}`}
+                        onClick={() => setRxSelectedId(aid)}
+                      >
+                        <strong>
+                          {formatDate(apt.slotDate)} · {formatTime12h(apt.slotTime)}
+                        </strong>
+                        <small>{apt.patientName || `Patient #${String(apt.patientId).slice(-6)}`}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="doctor-prescription-panel">
+                  {!rxSelectedId ? (
+                    <p className="text-muted">Choose a completed appointment on the left.</p>
+                  ) : (
+                    <>
+                      {rxLoading && <p className="text-muted">Loading existing prescriptions...</p>}
+                      {rxError && <p className="error-text">{rxError}</p>}
+                      {rxSuccess && <p className="success-text">{rxSuccess}</p>}
+                      <form
+                        className="doctor-prescription-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          submitPrescription();
+                        }}
+                      >
+                        {rxMedications.map((med, idx) => (
+                          <div key={`med-${idx}`} className="doctor-medication-card">
+                            <div className="doctor-medication-card-head">
+                              <span>Medication {idx + 1}</span>
+                              {rxMedications.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="row-action-btn cancel"
+                                  onClick={() => removeRxMedicationRow(idx)}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
+                            <div className="doctor-medication-grid">
+                              <div className="doctor-form-field">
+                                <label htmlFor={`rx-drug-${idx}`}>Drug name</label>
+                                <input
+                                  id={`rx-drug-${idx}`}
+                                  value={med.drugName}
+                                  onChange={(e) => updateRxMedicationRow(idx, 'drugName', e.target.value)}
+                                  placeholder="e.g. Amoxicillin"
+                                  required
+                                />
+                              </div>
+                              <div className="doctor-form-field">
+                                <label htmlFor={`rx-dosage-${idx}`}>Dosage</label>
+                                <input
+                                  id={`rx-dosage-${idx}`}
+                                  value={med.dosage}
+                                  onChange={(e) => updateRxMedicationRow(idx, 'dosage', e.target.value)}
+                                  placeholder="e.g. 500 mg"
+                                />
+                              </div>
+                              <div className="doctor-form-field">
+                                <label htmlFor={`rx-freq-${idx}`}>Frequency</label>
+                                <input
+                                  id={`rx-freq-${idx}`}
+                                  value={med.frequency}
+                                  onChange={(e) => updateRxMedicationRow(idx, 'frequency', e.target.value)}
+                                  placeholder="e.g. Twice daily"
+                                />
+                              </div>
+                              <div className="doctor-form-field">
+                                <label htmlFor={`rx-dur-${idx}`}>Duration</label>
+                                <input
+                                  id={`rx-dur-${idx}`}
+                                  value={med.duration}
+                                  onChange={(e) => updateRxMedicationRow(idx, 'duration', e.target.value)}
+                                  placeholder="e.g. 7 days"
+                                />
+                              </div>
+                              <div className="doctor-form-field doctor-medication-notes-field">
+                                <label htmlFor={`rx-notes-${idx}`}>Notes</label>
+                                <input
+                                  id={`rx-notes-${idx}`}
+                                  value={med.notes}
+                                  onChange={(e) => updateRxMedicationRow(idx, 'notes', e.target.value)}
+                                  placeholder="Optional instructions for this drug"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <button type="button" className="cancel-btn doctor-home-btn-light" onClick={addRxMedicationRow}>
+                          Add another medication
+                        </button>
+                        <div className="doctor-form-field doctor-rx-general-field">
+                          <label htmlFor="rx-general">General instructions</label>
+                          <textarea
+                            id="rx-general"
+                            value={rxGeneralInstructions}
+                            onChange={(e) => setRxGeneralInstructions(e.target.value)}
+                            placeholder="Food, follow-up, warnings..."
+                          />
+                        </div>
+                        <div className="doctor-prescription-actions">
+                          <button type="submit" className="login-btn" disabled={rxSaving}>
+                            {rxSaving ? 'Saving...' : 'Save prescription'}
+                          </button>
+                        </div>
+                      </form>
+                      {rxExisting.length > 0 && (
+                        <div className="doctor-existing-rx">
+                          <h5>Already issued for this visit</h5>
+                          <ul>
+                            {rxExisting.map((rx) => (
+                              <li key={rx._id}>
+                                <strong>{new Date(rx.createdAt).toLocaleString()}</strong>
+                                <ul className="doctor-existing-rx-medlist">
+                                  {(rx.medications || []).map((m, mi) => (
+                                    <li key={`${rx._id}-m-${mi}`}>
+                                      {m.drugName}
+                                      {m.dosage ? ` · ${m.dosage}` : ''}
+                                      {m.frequency ? ` · ${m.frequency}` : ''}
+                                      {m.duration ? ` · ${m.duration}` : ''}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {rx.generalInstructions ? (
+                                  <p className="doctor-existing-rx-instructions">{rx.generalInstructions}</p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
@@ -592,7 +879,7 @@ const DoctorHome = () => {
             {actionError && <p className="error-text">{actionError}</p>}
             {actionMessage && <p className="success-text">{actionMessage}</p>}
             <div className="details-grid">
-              <div><strong>Appointment ID</strong><span>{selectedAppointment._id}</span></div>
+              <div><strong>Appointment ID</strong><span>{appointmentRecordId(selectedAppointment)}</span></div>
               <div><strong>Patient</strong><span>{selectedAppointment.patientName || selectedAppointment.patientId}</span></div>
               <div><strong>Patient ID</strong><span>{selectedAppointment.patientId}</span></div>
               <div><strong>Date</strong><span>{formatDate(selectedAppointment.slotDate)}</span></div>
@@ -637,26 +924,26 @@ const DoctorHome = () => {
                 <button
                   type="button"
                   className="row-action-btn approve"
-                  onClick={() => runAppointmentAction(selectedAppointment._id, 'approve')}
-                  disabled={actionLoadingId === `${selectedAppointment._id}approve` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
+                  onClick={() => runAppointmentAction(appointmentRecordId(selectedAppointment), 'approve')}
+                  disabled={actionLoadingId === `${appointmentRecordId(selectedAppointment)}approve` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
                 >
-                  {actionLoadingId === `${selectedAppointment._id}approve` ? 'Approving...' : 'Approve Appointment'}
+                  {actionLoadingId === `${appointmentRecordId(selectedAppointment)}approve` ? 'Approving...' : 'Approve Appointment'}
                 </button>
                 <button
                   type="button"
                   className="row-action-btn approve"
-                  onClick={() => runAppointmentAction(selectedAppointment._id, 'complete')}
-                  disabled={actionLoadingId === `${selectedAppointment._id}complete` || selectedAppointment.status !== 'confirmed'}
+                  onClick={() => runAppointmentAction(appointmentRecordId(selectedAppointment), 'complete')}
+                  disabled={actionLoadingId === `${appointmentRecordId(selectedAppointment)}complete` || selectedAppointment.status !== 'confirmed'}
                 >
-                  {actionLoadingId === `${selectedAppointment._id}complete` ? 'Completing...' : 'Mark Completed'}
+                  {actionLoadingId === `${appointmentRecordId(selectedAppointment)}complete` ? 'Completing...' : 'Mark Completed'}
                 </button>
                 <button
                   type="button"
                   className="row-action-btn cancel"
-                  onClick={() => runAppointmentAction(selectedAppointment._id, 'cancel')}
-                  disabled={actionLoadingId === `${selectedAppointment._id}cancel` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
+                  onClick={() => runAppointmentAction(appointmentRecordId(selectedAppointment), 'cancel')}
+                  disabled={actionLoadingId === `${appointmentRecordId(selectedAppointment)}cancel` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
                 >
-                  {actionLoadingId === `${selectedAppointment._id}cancel` ? 'Cancelling...' : 'Cancel Appointment'}
+                  {actionLoadingId === `${appointmentRecordId(selectedAppointment)}cancel` ? 'Cancelling...' : 'Cancel Appointment'}
                 </button>
               </div>
             </div>

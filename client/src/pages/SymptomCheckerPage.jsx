@@ -3,8 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Loader2, Sparkles, Stethoscope, X } from 'lucide-react';
 import { Button, Card } from '../components/ui';
 
-const symptomCheckerApiBase =
-  import.meta.env.VITE_SYMPTOM_CHECKER_API_BASE_URL || 'http://localhost:8007/checker';
+/** Symptom API: gateway /api/checker → service /checker (or /history, /analyze at root on8010). */
+const gatewayOrigin = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8000';
+
+function resolveSymptomCheckerApiBase() {
+  const raw = import.meta.env.VITE_SYMPTOM_CHECKER_API_BASE_URL;
+  if (!raw || !String(raw).trim()) {
+    return `${gatewayOrigin}/api/checker`;
+  }
+  const base = String(raw).trim().replace(/\/+$/, '');
+  if (/\/checker$/i.test(base)) {
+    return base;
+  }
+  return `${base}/checker`;
+}
+
+const symptomCheckerApiBase = resolveSymptomCheckerApiBase();
 
 const quickSymptoms = [
   'fever',
@@ -103,7 +117,12 @@ export default function SymptomCheckerPage({ patient, clerkUserId }) {
 
       setHistory(Array.isArray(data.history) ? data.history : []);
     } catch (fetchError) {
-      setError(fetchError.message || 'Failed to fetch symptom check history');
+      const msg = fetchError.message || 'Failed to fetch symptom check history';
+      const hint =
+        msg === 'Failed to fetch' || msg === 'NetworkError when attempting to fetch resource.'
+          ? ' Start the API gateway (8000) and symptom-checker-service (8010), or set VITE_SYMPTOM_CHECKER_API_BASE_URL in client/.env.'
+          : '';
+      setError(`${msg}${hint}`);
     } finally {
       setHistoryLoading(false);
     }
@@ -149,7 +168,12 @@ export default function SymptomCheckerPage({ patient, clerkUserId }) {
       setResult(data);
       fetchHistory();
     } catch (analyzeError) {
-      setError(analyzeError.message || 'Failed to analyze symptoms');
+      const msg = analyzeError.message || 'Failed to analyze symptoms';
+      const hint =
+        msg === 'Failed to fetch' || msg === 'NetworkError when attempting to fetch resource.'
+          ? ' Start the API gateway (8000) and symptom-checker-service (8010), or set VITE_SYMPTOM_CHECKER_API_BASE_URL in client/.env.'
+          : '';
+      setError(`${msg}${hint}`);
     } finally {
       setLoading(false);
     }

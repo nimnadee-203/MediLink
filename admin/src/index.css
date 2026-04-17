@@ -1576,6 +1576,26 @@ h2 {
   }
 }
 
+.doctor-medication-notes-field {
+  grid-column: 1 / -1;
+}
+
+.doctor-rx-general-field {
+  margin-top: 12px;
+}
+
+.doctor-existing-rx-medlist {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  list-style: disc;
+}
+
+.doctor-existing-rx-instructions {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
 .doctor-prescription-actions {
   display: flex;
   gap: 10px;

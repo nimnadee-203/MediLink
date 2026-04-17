@@ -38,6 +38,17 @@ const normalizeDoctor = (doctor) => ({
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value));
 
+/** YYYY-MM-DD in the server local timezone (matches ISO date strings from booking). */
+const localDateKey = () => new Date().toLocaleDateString("en-CA");
+
+const appointmentSlotTimestamp = (a) => {
+  const time = String(a.slotTime || "00:00").trim();
+  const hhmm = time.length >= 5 ? time.slice(0, 5) : "00:00";
+  const t = new Date(`${a.slotDate}T${hhmm}:00`);
+  const ms = t.getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+};
+
 /* ===================== DOCTOR LIST ===================== */
 export const listDoctors = async (_req, res) => {
   try {
@@ -77,21 +88,42 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 
     const { data } = await axios.get(
       `${APPOINTMENT_SERVICE_URL}/api/appointments?doctorId=${doctorId}`,
-      { headers: { dtoken } }
+      {
+        headers: { dtoken, "Cache-Control": "no-cache" },
+        params: { _t: Date.now() }
+      }
     );
 
     const appointments = data?.appointments || [];
-    const now = Date.now();
+    const todayStr = localDateKey();
 
-    const upcoming = appointments.filter(
-      (a) =>
-        ["pending", "confirmed"].includes(a.status) &&
-        new Date(`${a.slotDate}T${a.slotTime}`).getTime() >= now
-    );
+    // Queue: pending/confirmed for today or a future calendar day (not "slot time already passed today",
+    // which hid same-day visits and made the list look frozen after the booked time).
+    const upcoming = appointments
+      .filter((a) => {
+        if (!["pending", "confirmed"].includes(a.status)) return false;
+        if (!a.slotDate) return true;
+        return String(a.slotDate) >= todayStr;
+      })
+      .sort((a, b) => appointmentSlotTimestamp(a) - appointmentSlotTimestamp(b));
+
+    const stats = {
+      todayAppointments: appointments.filter(
+        (a) => ["pending", "confirmed"].includes(a.status) && a.slotDate === todayStr
+      ).length,
+      pendingAppointments: appointments.filter((a) => a.status === "pending").length,
+      completedToday: appointments.filter((a) => {
+        if (a.status !== "completed" || !a.updatedAt) return false;
+        const u = new Date(a.updatedAt);
+        if (Number.isNaN(u.getTime())) return false;
+        return u.toLocaleDateString("en-CA") === todayStr;
+      }).length
+    };
 
     return res.json({
       success: true,
       doctor,
+      stats,
       upcomingAppointments: upcoming
     });
   } catch (error) {
@@ -179,16 +211,55 @@ export const completeDoctorAppointment = async (req, res) => {
 
 export const createDoctorPrescription = async (req, res) => {
   try {
-    const { appointmentId, medications } = req.body;
+    const { appointmentId, medications, generalInstructions } = req.body;
+    const { dtoken } = req.headers;
 
     if (!appointmentId || !isValidObjectId(appointmentId)) {
       return res.json({ success: false, message: "Invalid appointmentId" });
     }
 
+    const { data } = await axios.get(
+      `${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`,
+      { headers: { dtoken } }
+    );
+
+    const appointment = data?.appointment;
+    if (!appointment) {
+      return res.json({ success: false, message: "Appointment not found" });
+    }
+
+    if (String(appointment.doctorId) !== String(req.doctorId)) {
+      return res.json({ success: false, message: "Not allowed for this appointment" });
+    }
+
+    if (appointment.status !== "completed") {
+      return res.json({
+        success: false,
+        message: "Prescriptions can only be issued for completed appointments"
+      });
+    }
+
+    const rawMeds = Array.isArray(medications) ? medications : [];
+    const normalizedMeds = rawMeds
+      .map((m) => ({
+        drugName: String(m?.drugName || "").trim(),
+        dosage: String(m?.dosage || "").trim(),
+        frequency: String(m?.frequency || "").trim(),
+        duration: String(m?.duration || "").trim(),
+        notes: String(m?.notes || "").trim()
+      }))
+      .filter((m) => m.drugName);
+
+    if (normalizedMeds.length === 0) {
+      return res.json({ success: false, message: "Add at least one medication with a name" });
+    }
+
     const created = await prescriptionModel.create({
       doctorId: req.doctorId,
+      patientId: appointment.patientId,
       appointmentId,
-      medications
+      medications: normalizedMeds,
+      generalInstructions: String(generalInstructions || "").trim()
     });
 
     return res.json({ success: true, prescription: created });

@@ -7,7 +7,11 @@ import { appointmentRequest } from '../lib/api';
 import '../styles/payment-notification-ai.css';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
-const paymentApiBaseUrl = import.meta.env.VITE_PAYMENT_API_BASE_URL || 'http://localhost:8019';
+
+/** Payment service is exposed via API gateway at /api/payments → payment-service /payments */
+const gatewayOrigin = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8000';
+const paymentApiBaseUrl =
+  import.meta.env.VITE_PAYMENT_API_BASE_URL || `${gatewayOrigin}/api`;
 
 function CheckoutForm({ initialForm, getToken }) {
   const stripe = useStripe();
@@ -111,7 +115,12 @@ function CheckoutForm({ initialForm, getToken }) {
       setMessage('Payment completed with an unexpected status.');
     } catch (error) {
       setStatus('error');
-      setMessage(error.message || 'An error occurred during payment processing');
+      const msg = error?.message || 'An error occurred during payment processing';
+      const hint =
+        msg === 'Failed to fetch' || msg === 'NetworkError when attempting to fetch resource.'
+          ? ' Check that the API gateway (port 8000) and payment service (port 8019) are running, or set VITE_PAYMENT_API_BASE_URL in client/.env.'
+          : '';
+      setMessage(`${msg}${hint}`);
     }
   };
 

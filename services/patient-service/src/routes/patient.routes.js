@@ -1246,7 +1246,6 @@ router.get('/prescriptions', authMiddleware, async (req, res) => {
 });
 
 router.get('/:id([a-fA-F0-9]{24})', async (req, res) => {
-router.get('/:id', async (req, res) => {
   try {
     const [patient, admin] = await Promise.all([
       Patient.findById(req.params.id).select('name email role'),
@@ -1262,5 +1261,4 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-export default router;
 export default router;
