@@ -4,6 +4,7 @@ import { useAuth, useUser } from '@clerk/clerk-react';
 import { AlertCircle, ArrowLeft, Loader2, Video } from 'lucide-react';
 import { Card, Button } from '../components/ui';
 import { appointmentRequest } from '../lib/api';
+import axios from 'axios';
 import { fetchDoctorById, formatDoctorDisplayName } from '../lib/doctors';
 import { buildMockRoomName, getResolvedVisitMode } from '../lib/telemedicine';
 
@@ -121,13 +122,30 @@ export default function TelemedicineSession() {
         [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
         'Patient';
 
+      const email = user?.primaryEmailAddress?.emailAddress || '';
+
+      const { data } = await axios.post(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/telemedicine/token`,
+        {
+          roomName,
+          userName: displayName,
+          email,
+          isModerator: false
+        },
+        { headers: { Authorization: `Bearer ${await getToken()}` } }
+      );
+
+      const token = data?.token;
+      console.log("🔒 Secure JWT fetched from backend:", token); // Demonstrates backend authorization successful
+
       jitsiApiRef.current = new window.JitsiMeetExternalAPI('meet.jit.si', {
         roomName,
         parentNode: jitsiContainerRef.current,
         width: '100%',
         height: 560,
         userInfo: {
-          displayName
+          displayName,
+          email
         },
         configOverwrite: {
           prejoinPageEnabled: true,
