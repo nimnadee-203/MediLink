@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 import { createClerkClient } from '@clerk/backend';
 import Patient from '../models/Patient.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -15,6 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
+
+const DOCTOR_SERVICE_URL = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
 
 const reportsDir = path.join(__dirname, '..', 'uploads', 'reports');
 if (!fs.existsSync(reportsDir)) {
@@ -685,6 +688,29 @@ router.get('/emails/:id', async (req, res) => {
   }
 });
 
+router.get('/prescriptions', authMiddleware, async (req, res) => {
+  try {
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+
+    const response = await axios.get(`${DOCTOR_SERVICE_URL}/api/doctor/internal/patient-prescriptions`, {
+      params: { patientId: patient._id }
+    });
+
+    if (!response.data?.success) {
+      return res.status(500).json({ message: response.data?.message || 'Failed to fetch prescriptions' });
+    }
+
+    return res.json({ prescriptions: response.data.prescriptions || [] });
+  } catch (error) {
+    console.error('[patient] prescriptions list', error.message);
+    return res.status(500).json({ message: error.message || 'Failed to fetch prescriptions' });
+  }
+});
+
+router.get('/:id([a-fA-F0-9]{24})', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id).select('name email');
@@ -697,4 +723,5 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+export default router;
 export default router;

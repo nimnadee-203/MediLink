@@ -27,6 +27,17 @@ export const createNotification = async (req, res) => {
   try {
     const { recipientId, recipientRole, type, title, body, appointmentId, appointmentDetails } = req.body;
 
+    if (type === "appointment_booked") {
+      const paidStatus = String(appointmentDetails?.paymentStatus || "").toLowerCase();
+      if (paidStatus !== "paid") {
+        return res.status(202).json({
+          success: true,
+          skipped: true,
+          message: "appointment_booked notification suppressed until payment is paid"
+        });
+      }
+    }
+
     if (!recipientId || !recipientRole || !title) {
       return res.status(400).json({
         success: false,
