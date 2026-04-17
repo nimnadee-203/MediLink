@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { toast } from 'react-toastify';
 import { AdminContext } from '../context/AdminContext';
 import DoctorNotificationBell from '../components/DoctorNotificationBell';
 
@@ -292,7 +293,8 @@ const DoctorHome = () => {
       if (!data.success) {
         throw new Error(data.message || 'Failed to save prescription');
       }
-      setRxSuccess('Prescription saved. The patient will see it in their portal.');
+      setRxSuccess('Prescription saved successfully.');
+      toast.success('Prescription saved successfully.');
       setRxMedications([emptyMedicationRow()]);
       setRxGeneralInstructions('');
       const list = await axios.get(`${backendUrl}/api/doctor/prescriptions`, {
@@ -303,7 +305,10 @@ const DoctorHome = () => {
         setRxExisting(list.data.prescriptions || []);
       }
     } catch (err) {
-      setRxError(err.response?.data?.message || err.message || 'Failed to save prescription');
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to save prescription';
+      console.error('Prescription save error:', err);
+      setRxError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setRxSaving(false);
     }
