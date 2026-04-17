@@ -104,6 +104,22 @@
   cursor: not-allowed;
 }
 
+.btn-cancel {
+  border-color: #fecaca;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.btn-cancel:hover {
+  border-color: #fca5a5;
+  background: #fecaca;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .button-group {
   display: flex;
   gap: 10px;

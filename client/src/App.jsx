@@ -200,11 +200,14 @@ function AppContent() {
   const [isRoleResolved, setIsRoleResolved] = useState(false);
   const [message, setMessage] = useState('');
   const [reports, setReports] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+  const [prescriptionsError, setPrescriptionsError] = useState('');
   const [currentRole, setCurrentRole] = useState('patient');
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminSection, setAdminSection] = useState('overview');
   const [doctorSection, setDoctorSection] = useState('overview');
-  const [patientSection, setPatientSection] = useState('overview');
+  const [patientSection, setPatientSection] = useState('appointments');
   const [adminNewUser, setAdminNewUser] = useState({ name: '', username: '', email: '', password: '', role: 'patient', phone: '' });
   const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
   const [editingAdminUserId, setEditingAdminUserId] = useState(null);
@@ -340,6 +343,20 @@ function AppContent() {
     }
   };
 
+  const fetchPrescriptions = async () => {
+    try {
+      setPrescriptionsLoading(true);
+      setPrescriptionsError('');
+      const data = await request('/prescriptions');
+      setPrescriptions(data.prescriptions || []);
+    } catch (err) {
+      setPrescriptions([]);
+      setPrescriptionsError(err.message || 'Failed to load prescriptions');
+    } finally {
+      setPrescriptionsLoading(false);
+    }
+  };
+
   const fetchAdminUsers = async () => {
     try {
       const data = await request('/admin/users');
@@ -353,6 +370,9 @@ function AppContent() {
     if (!isSignedIn) {
       setPatient(null);
       setReports([]);
+      setPrescriptions([]);
+      setPrescriptionsError('');
+      setPrescriptionsLoading(false);
       setCurrentRole('patient');
       setIsRoleResolved(false);
       setAdminUsers([]);
@@ -369,12 +389,14 @@ function AppContent() {
       path === '/profile' ||
       path === '/doctors' ||
       path === '/appointments' ||
+      path === '/prescriptions' ||
       path.startsWith('/book/');
     if (shouldLoadProtectedData) {
       setIsRoleResolved(false);
       const loadProtectedData = async () => {
         await fetchProfile();
         await fetchReports();
+        await fetchPrescriptions();
       };
       loadProtectedData();
     } else {
@@ -391,7 +413,7 @@ function AppContent() {
   useEffect(() => {
     setAdminSection('overview');
     setDoctorSection('overview');
-    setPatientSection('overview');
+    setPatientSection('appointments');
   }, [effectiveRole]);
 
   useEffect(() => {
@@ -1546,13 +1568,7 @@ function AppContent() {
                         <p className="text-slate-800 font-semibold tracking-tight">Health Dashboard</p>
                       </div>
                       <div className="space-y-1.5 focus:outline-none">
-                        <button
-                          type="button"
-                          className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', patientSection === 'overview' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                          onClick={() => setPatientSection('overview')}
-                        >
-                          <Activity size={18} className={patientSection === 'overview' ? 'text-indigo-600' : 'text-slate-400'} /> Dashboard Overview
-                        </button>
+
                         {hasPrivilege('browse_doctors') && (
                           <button
                             type="button"
@@ -1569,15 +1585,6 @@ function AppContent() {
                             onClick={() => setPatientSection('appointments')}
                           >
                             <Calendar size={18} className={patientSection === 'appointments' ? 'text-indigo-600' : 'text-slate-400'} /> Book Appointments
-                          </button>
-                        )}
-                        {hasPrivilege('video_consultations') && (
-                          <button
-                            type="button"
-                            className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', patientSection === 'consultations' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                            onClick={() => setPatientSection('consultations')}
-                          >
-                            <Activity size={18} className={patientSection === 'consultations' ? 'text-indigo-600' : 'text-slate-400'} /> Video Consultations
                           </button>
                         )}
                         {hasPrivilege('upload_reports') && (
@@ -1611,68 +1618,7 @@ function AppContent() {
                     </Card>
 
                     <div className="space-y-8">
-                      {patientSection === 'overview' && (
-                        <>
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200/60">
-                            <div className="flex items-center gap-5">
-                        <div className="h-16 w-16 bg-gradient-to-br from-indigo-500 to-blue-600 text-white rounded-2xl shadow-md flex items-center justify-center text-2xl font-bold tracking-tight">
-                          {(patient?.name || user?.firstName || 'P')?.charAt(0)?.toUpperCase()}
-                        </div>
-                        <div>
-                          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Welcome back, {effectivePatientName}</h2>
-                          <p className="text-slate-500 text-sm font-medium mt-1">Manage your health records securely.</p>
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <Card className="p-6 relative overflow-hidden group">
-                        <div className="h-1 bg-indigo-500 absolute top-0 left-0 w-full opacity-50"></div>
-                        <div className="flex justify-between items-start mb-4">
-                          <p className="font-medium text-slate-500">Upcoming Appointments</p>
-                          <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform"><Calendar size={20} /></div>
-                        </div>
-                        <p className="text-4xl font-extrabold text-slate-800 tracking-tight">1</p>
-                      </Card>
-                      <Card className="p-6 relative overflow-hidden group">
-                        <div className="h-1 bg-emerald-500 absolute top-0 left-0 w-full opacity-50"></div>
-                        <div className="flex justify-between items-start mb-4">
-                          <p className="font-medium text-slate-500">Medical Reports</p>
-                          <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform"><FileText size={20} /></div>
-                        </div>
-                        <p className="text-4xl font-extrabold text-slate-800 tracking-tight">{reports.length}</p>
-                      </Card>
-                      <Card className="p-6 relative overflow-hidden group">
-                        <div className="h-1 bg-amber-500 absolute top-0 left-0 w-full opacity-50"></div>
-                        <div className="flex justify-between items-start mb-4">
-                          <p className="font-medium text-slate-500">Active Prescriptions</p>
-                          <div className="p-2 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform"><Activity size={20} /></div>
-                        </div>
-                        <p className="text-4xl font-extrabold text-slate-800 tracking-tight">2</p>
-                      </Card>
-                    </div>
-
-                    <Card className="border-t-4 border-t-slate-200">
-                      <h3 className="text-lg font-bold text-slate-800 mb-4 px-1">Next Appointment</h3>
-                      <ul className="flex flex-col gap-3">
-                        <li className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 hover:border-indigo-200 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0 border border-slate-100">
-                               <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"></div>
-                            </div>
-                            <div>
-                               <p className="font-bold text-slate-800">Dr. Sarah Connor</p>
-                               <p className="text-sm font-medium text-slate-500">General Checkup</p>
-                            </div>
-                          </div>
-                          <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 text-sm font-bold text-indigo-600 shrink-0">
-                             Tomorrow, 10:00 AM
-                          </div>
-                        </li>
-                      </ul>
-                    </Card>
-                        </>
-                      )}
 
                       {patientSection === 'doctors' && hasPrivilege('browse_doctors') && (
                         <DoctorsList />
@@ -1826,8 +1772,95 @@ function AppContent() {
                         <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
                           <h3 className="text-2xl font-bold text-slate-800 tracking-tight">My Prescriptions</h3>
                           <p className="text-slate-500 font-medium text-sm mt-1">View digital prescriptions issued by your doctors.</p>
-                          <div className="mt-6 p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <p className="text-slate-700 font-medium">Prescription history component can be merged into this section.</p>
+                          <div className="mt-6 space-y-4">
+                            {prescriptionsLoading ? (
+                              <div className="text-sm text-slate-500 flex items-center gap-2">
+                                <RefreshCw size={14} className="animate-spin" />
+                                Loading prescriptions...
+                              </div>
+                            ) : prescriptionsError ? (
+                              <div className="rounded-xl border border-red-100 bg-red-50 text-red-700 text-sm px-4 py-3">
+                                {prescriptionsError}
+                              </div>
+                            ) : prescriptions.length === 0 ? (
+                              <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                                <div className="w-16 h-16 bg-slate-100 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <Shield size={28} />
+                                </div>
+                                <h4 className="text-slate-800 font-bold mb-1">No prescriptions found</h4>
+                                <p className="text-slate-500 text-sm">Prescriptions issued by your doctors will appear here after consultations.</p>
+                              </div>
+                            ) : (
+                              <ul className="space-y-4">
+                                {prescriptions.map((rx) => (
+                                  <li
+                                    key={rx._id}
+                                    className="p-5 rounded-2xl border border-slate-200/70 hover:border-indigo-200 hover:shadow-md transition-all bg-white flex flex-col gap-3"
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                                          {rx.slotDate && rx.slotTime
+                                            ? `${formatAppointmentDate(rx.slotDate)} · ${formatTime12h(rx.slotTime)}`
+                                            : new Date(rx.createdAt).toLocaleString()}
+                                        </p>
+                                        <h4 className="text-base font-bold text-slate-800">
+                                          {rx.doctorName}{' '}
+                                          {rx.doctorSpeciality && (
+                                            <span className="text-slate-500 font-medium text-sm">· {rx.doctorSpeciality}</span>
+                                          )}
+                                        </h4>
+                                        {rx.reason && (
+                                          <p className="text-xs text-slate-500 mt-1">Reason: {rx.reason}</p>
+                                        )}
+                                      </div>
+                                      {rx.visitMode && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs px-3 py-1 font-semibold">
+                                          {rx.visitMode === 'telemedicine' ? (
+                                            <>
+                                              <Video size={12} /> Telemedicine
+                                            </>
+                                          ) : (
+                                            'In-person'
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="border border-slate-100 rounded-2xl bg-slate-50/60 p-3">
+                                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+                                        Medications
+                                      </p>
+                                      <ul className="space-y-1.5">
+                                        {(rx.medications || []).map((m, idx) => (
+                                          <li key={`${rx._id}-m-${idx}`} className="text-sm text-slate-700 flex gap-2">
+                                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                                            <span>
+                                              <span className="font-semibold">{m.drugName}</span>
+                                              {m.dosage && <span className="text-slate-600"> · {m.dosage}</span>}
+                                              {m.frequency && <span className="text-slate-600"> · {m.frequency}</span>}
+                                              {m.duration && <span className="text-slate-600"> · {m.duration}</span>}
+                                              {m.notes && (
+                                                <span className="block text-xs text-slate-500 mt-0.5">
+                                                  {m.notes}
+                                                </span>
+                                              )}
+                                            </span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                    {rx.generalInstructions && (
+                                      <div className="border border-amber-100 bg-amber-50/70 rounded-2xl px-4 py-3 text-sm text-amber-900">
+                                        <p className="font-semibold text-xs uppercase tracking-wide mb-1 text-amber-700">
+                                          General instructions
+                                        </p>
+                                        <p className="leading-relaxed">{rx.generalInstructions}</p>
+                                      </div>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         </Card>
                       )}

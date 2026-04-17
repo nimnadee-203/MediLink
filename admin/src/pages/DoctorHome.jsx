@@ -6,6 +6,15 @@ import DoctorNotificationBell from '../components/DoctorNotificationBell';
 
 const JITSI_SCRIPT_URL = 'https://meet.jit.si/external_api.js';
 
+const newMedicationRow = () => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+  drugName: '',
+  dosage: '',
+  frequency: '',
+  duration: '',
+  notes: ''
+});
+
 function loadJitsiScript() {
   return new Promise((resolve, reject) => {
     if (window.JitsiMeetExternalAPI) {
@@ -62,6 +71,17 @@ const DoctorHome = () => {
   const [actionLoadingId, setActionLoadingId] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [completedAppointments, setCompletedAppointments] = useState([]);
+  const [completedLoading, setCompletedLoading] = useState(false);
+  const [completedError, setCompletedError] = useState('');
+  const [prescriptionAppointment, setPrescriptionAppointment] = useState(null);
+  const [medicationRows, setMedicationRows] = useState([newMedicationRow()]);
+  const [generalInstructions, setGeneralInstructions] = useState('');
+  const [existingPrescriptions, setExistingPrescriptions] = useState([]);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+  const [prescriptionFormError, setPrescriptionFormError] = useState('');
+  const [prescriptionFormSuccess, setPrescriptionFormSuccess] = useState('');
+  const [prescriptionSubmitting, setPrescriptionSubmitting] = useState(false);
 
   const onLogout = () => {
     localStorage.removeItem('dToken');
@@ -125,15 +145,176 @@ const DoctorHome = () => {
     loadDoctorHome();
   }, [dToken]);
 
+  useEffect(() => {
+    if (!dToken) {
+      return;
+    }
+
+    loadCompletedAppointments();
+  }, [dToken]);
+
+  useEffect(() => {
+    if (!dToken) {
+      return undefined;
+    }
+
+    let timeoutId;
+
+    const scheduleMidnightRefresh = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+
+      timeoutId = window.setTimeout(async () => {
+        await loadDoctorHome();
+        await loadCompletedAppointments();
+        scheduleMidnightRefresh();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    scheduleMidnightRefresh();
+
+    return () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [dToken]);
+
+  const loadCompletedAppointments = async () => {
+    if (!dToken) return;
+    try {
+      setCompletedLoading(true);
+      setCompletedError('');
+      const { data } = await axios.get(`${backendUrl}/api/doctor/appointments/completed`, {
+        headers: { dtoken: dToken }
+      });
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to load completed appointments');
+      }
+      setCompletedAppointments(Array.isArray(data.completedAppointments) ? data.completedAppointments : []);
+    } catch (err) {
+      setCompletedError(err.response?.data?.message || err.message || 'Failed to load completed appointments');
+      setCompletedAppointments([]);
+    } finally {
+      setCompletedLoading(false);
+    }
+  };
+
+  const loadPrescriptionsForAppointment = async (appointmentId) => {
+    if (!dToken || !appointmentId) return;
+    try {
+      setPrescriptionsLoading(true);
+      const { data } = await axios.get(`${backendUrl}/api/doctor/prescriptions`, {
+        headers: { dtoken: dToken },
+        params: { appointmentId }
+      });
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to load prescriptions');
+      }
+      setPrescriptionFormError('');
+      setExistingPrescriptions(Array.isArray(data.prescriptions) ? data.prescriptions : []);
+    } catch (err) {
+      setExistingPrescriptions([]);
+      setPrescriptionFormError(err.response?.data?.message || err.message || 'Failed to load prescriptions');
+    } finally {
+      setPrescriptionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!dToken || activeSection !== 'prescriptions') {
+      return;
+    }
+    loadCompletedAppointments();
+  }, [dToken, activeSection]);
+
+  useEffect(() => {
+    if (!prescriptionAppointment?._id || !dToken) {
+      setExistingPrescriptions([]);
+      return;
+    }
+    setPrescriptionFormError('');
+    loadPrescriptionsForAppointment(prescriptionAppointment._id);
+  }, [prescriptionAppointment?._id, dToken]);
+
+  const selectPrescriptionAppointment = (apt) => {
+    setPrescriptionAppointment(apt);
+    setMedicationRows([newMedicationRow()]);
+    setGeneralInstructions('');
+    setPrescriptionFormError('');
+    setPrescriptionFormSuccess('');
+  };
+
+  const updateMedicationRow = (rowId, field, value) => {
+    setMedicationRows((rows) => rows.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+  };
+
+  const addMedicationRow = () => {
+    setMedicationRows((rows) => [...rows, newMedicationRow()]);
+  };
+
+  const removeMedicationRow = (rowId) => {
+    setMedicationRows((rows) => {
+      const next = rows.filter((r) => r.id !== rowId);
+      return next.length ? next : [newMedicationRow()];
+    });
+  };
+
+  const submitPrescription = async (e) => {
+    e.preventDefault();
+    if (!prescriptionAppointment?._id || !dToken) return;
+    setPrescriptionFormError('');
+    setPrescriptionFormSuccess('');
+    try {
+      setPrescriptionSubmitting(true);
+      const { data } = await axios.post(
+        `${backendUrl}/api/doctor/prescriptions`,
+        {
+          appointmentId: prescriptionAppointment._id,
+          medications: medicationRows.map(({ drugName, dosage, frequency, duration, notes }) => ({
+            drugName,
+            dosage,
+            frequency,
+            duration,
+            notes
+          })),
+          generalInstructions
+        },
+        { headers: { dtoken: dToken } }
+      );
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to save prescription');
+      }
+      setPrescriptionFormSuccess(data.message || 'Prescription saved');
+      setMedicationRows([newMedicationRow()]);
+      setGeneralInstructions('');
+      await loadPrescriptionsForAppointment(prescriptionAppointment._id);
+    } catch (err) {
+      setPrescriptionFormError(err.response?.data?.message || err.message || 'Failed to save prescription');
+    } finally {
+      setPrescriptionSubmitting(false);
+    }
+  };
+
   const upcomingSummary = useMemo(() => {
     if (upcomingAppointments.length === 0) return 'No upcoming appointments.';
     return `${upcomingAppointments.length} upcoming appointment${upcomingAppointments.length > 1 ? 's' : ''}.`;
   }, [upcomingAppointments]);
 
+  const analyticsAppointments = useMemo(() => {
+    const merged = new Map();
+    [...upcomingAppointments, ...completedAppointments].forEach((appointment) => {
+      if (!appointment?._id) return;
+      merged.set(String(appointment._id), appointment);
+    });
+    return [...merged.values()];
+  }, [completedAppointments, upcomingAppointments]);
+
   const chartData = useMemo(() => {
     const statuses = ['pending', 'confirmed', 'completed', 'cancelled'];
     const counts = statuses.reduce((acc, status) => {
-      acc[status] = upcomingAppointments.filter((item) => item.status === status).length;
+      acc[status] = analyticsAppointments.filter((item) => item.status === status).length;
       return acc;
     }, {});
 
@@ -170,7 +351,7 @@ const DoctorHome = () => {
       byDay,
       maxDayCount
     };
-  }, [upcomingAppointments]);
+  }, [analyticsAppointments, upcomingAppointments]);
 
   const todayText = useMemo(
     () =>
@@ -301,6 +482,9 @@ const DoctorHome = () => {
       setActionMessage(data.message || `Appointment ${action}d successfully`);
 
       await loadDoctorHome();
+      if (action === 'complete') {
+        await loadCompletedAppointments();
+      }
       if (selectedAppointment?._id === appointmentId) {
         const refreshed = await axios.get(`${backendUrl}/api/doctor/appointments/${appointmentId}`, {
           headers: { dtoken: dToken }
@@ -369,6 +553,14 @@ const DoctorHome = () => {
             <span>Upcoming Queue</span>
             <small>{upcomingAppointments.length}</small>
           </button>
+          <button
+            type="button"
+            className={`doctor-nav-item ${activeSection === 'prescriptions' ? 'active' : ''}`}
+            onClick={() => goToSection('prescriptions')}
+          >
+            <span>Prescriptions</span>
+            <small>{activeSection === 'prescriptions' || completedAppointments.length > 0 ? completedAppointments.length : '—'}</small>
+          </button>
         </aside>
 
         <div className="doctor-home-content">
@@ -412,8 +604,8 @@ const DoctorHome = () => {
           <div id="doctor-section-analytics" className="doctor-home-charts">
             <div className="card doctor-chart-card">
               <div className="doctor-chart-header">
-                <h3>Status Mix</h3>
-                <p>Upcoming appointment distribution</p>
+                <h3>Appointment Status Mix</h3>
+                <p>Current appointments across every status</p>
               </div>
               <div className="doctor-donut-wrap">
                 <div className="doctor-donut" style={chartData.donutStyle}>
@@ -518,6 +710,17 @@ const DoctorHome = () => {
                     </button>
                     <button
                       type="button"
+                      className="row-action-btn approve"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        runAppointmentAction(apt._id, 'complete');
+                      }}
+                      disabled={actionLoadingId === `${apt._id}complete` || apt.status !== 'confirmed'}
+                    >
+                      {actionLoadingId === `${apt._id}complete` ? 'Completing...' : 'Mark Completed'}
+                    </button>
+                    <button
+                      type="button"
                       className="row-action-btn cancel"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -535,6 +738,186 @@ const DoctorHome = () => {
           </>
         )}
       </div>
+
+          <div id="doctor-section-prescriptions" className="card doctor-home-list doctor-prescriptions-section">
+            <div className="doctor-chart-header">
+              <h3>Prescriptions</h3>
+              <p>Completed visits — add medications and instructions for the patient record</p>
+            </div>
+            {completedLoading ? (
+              <p className="text-muted">Loading completed appointments...</p>
+            ) : completedError ? (
+              <p className="error-text">{completedError}</p>
+            ) : (
+              <div className="doctor-prescriptions-layout">
+                <div className="doctor-prescription-panel">
+                  <h4>Completed appointments</h4>
+                  {completedAppointments.length === 0 ? (
+                    <p className="text-muted">No completed appointments yet. Mark visits as completed to prescribe here.</p>
+                  ) : (
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                      {completedAppointments.map((apt) => (
+                        <li key={apt._id} style={{ marginBottom: 8 }}>
+                          <button
+                            type="button"
+                            className={`doctor-prescription-item ${prescriptionAppointment?._id === apt._id ? 'selected' : ''}`}
+                            onClick={() => selectPrescriptionAppointment(apt)}
+                          >
+                            <div>
+                              <strong>{formatTime12h(apt.slotTime)}</strong>
+                              <span>
+                                {formatDate(apt.slotDate)} · {apt.patientName || `Patient #${String(apt.patientId).slice(-6)}`}
+                              </span>
+                            </div>
+                            <div style={{ marginTop: 6 }}>
+                              <span
+                                className={`visit-mode-chip ${apt.visitMode === 'telemedicine' ? 'telemedicine' : 'inperson'}`}
+                              >
+                                {apt.visitMode === 'telemedicine' ? 'Telemedicine' : 'In-person'}
+                              </span>
+                              <span className={`status-chip ${apt.status}`} style={{ marginLeft: 8 }}>
+                                {apt.status}
+                              </span>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="doctor-prescription-panel doctor-prescription-form">
+                  <h4>New prescription</h4>
+                  {!prescriptionAppointment ? (
+                    <p className="text-muted">Select a completed appointment to open the prescription form.</p>
+                  ) : (
+                    <form onSubmit={submitPrescription}>
+                      <p style={{ fontSize: '0.9rem', color: '#475569', marginBottom: 12 }}>
+                        <strong>{prescriptionAppointment.patientName || 'Patient'}</strong>
+                        {' · '}
+                        {formatDate(prescriptionAppointment.slotDate)} at {formatTime12h(prescriptionAppointment.slotTime)}
+                      </p>
+                      {prescriptionFormError && <p className="error-text">{prescriptionFormError}</p>}
+                      {prescriptionFormSuccess && <p className="success-text">{prescriptionFormSuccess}</p>}
+                      {medicationRows.map((row, index) => (
+                        <div key={row.id} className="doctor-medication-card">
+                          <div className="doctor-medication-card-head">
+                            <span>Medication {index + 1}</span>
+                            {medicationRows.length > 1 && (
+                              <button
+                                type="button"
+                                className="row-action-btn cancel"
+                                onClick={() => removeMedicationRow(row.id)}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          <div className="doctor-medication-grid">
+                            <div className="doctor-form-field">
+                              <label htmlFor={`rx-drug-${row.id}`}>Drug name</label>
+                              <input
+                                id={`rx-drug-${row.id}`}
+                                value={row.drugName}
+                                onChange={(ev) => updateMedicationRow(row.id, 'drugName', ev.target.value)}
+                                placeholder="e.g. Amoxicillin"
+                              />
+                            </div>
+                            <div className="doctor-form-field">
+                              <label htmlFor={`rx-dose-${row.id}`}>Dosage / strength</label>
+                              <input
+                                id={`rx-dose-${row.id}`}
+                                value={row.dosage}
+                                onChange={(ev) => updateMedicationRow(row.id, 'dosage', ev.target.value)}
+                                placeholder="e.g. 500 mg"
+                              />
+                            </div>
+                            <div className="doctor-form-field">
+                              <label htmlFor={`rx-freq-${row.id}`}>Frequency</label>
+                              <input
+                                id={`rx-freq-${row.id}`}
+                                value={row.frequency}
+                                onChange={(ev) => updateMedicationRow(row.id, 'frequency', ev.target.value)}
+                                placeholder="e.g. Twice daily"
+                              />
+                            </div>
+                            <div className="doctor-form-field">
+                              <label htmlFor={`rx-dur-${row.id}`}>Duration</label>
+                              <input
+                                id={`rx-dur-${row.id}`}
+                                value={row.duration}
+                                onChange={(ev) => updateMedicationRow(row.id, 'duration', ev.target.value)}
+                                placeholder="e.g. 7 days"
+                              />
+                            </div>
+                            <div className="doctor-form-field" style={{ gridColumn: '1 / -1' }}>
+                              <label htmlFor={`rx-notes-${row.id}`}>Line notes (optional)</label>
+                              <input
+                                id={`rx-notes-${row.id}`}
+                                value={row.notes}
+                                onChange={(ev) => updateMedicationRow(row.id, 'notes', ev.target.value)}
+                                placeholder="Take with food, etc."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <button type="button" className="row-action-btn view" onClick={addMedicationRow}>
+                        + Add medication line
+                      </button>
+                      <div className="doctor-form-field" style={{ marginTop: 12 }}>
+                        <label htmlFor="rx-general">General instructions</label>
+                        <textarea
+                          id="rx-general"
+                          value={generalInstructions}
+                          onChange={(ev) => setGeneralInstructions(ev.target.value)}
+                          placeholder="Follow-up, lifestyle advice, or pharmacy notes"
+                        />
+                      </div>
+                      <div className="doctor-prescription-actions">
+                        <button type="submit" className="login-btn doctor-home-btn-primary" disabled={prescriptionSubmitting}>
+                          {prescriptionSubmitting ? 'Saving...' : 'Save prescription'}
+                        </button>
+                      </div>
+                      <div className="doctor-existing-rx">
+                        <h5>Prescriptions on file for this visit</h5>
+                        {prescriptionsLoading ? (
+                          <p className="text-muted">Loading...</p>
+                        ) : existingPrescriptions.length === 0 ? (
+                          <p className="text-muted">None yet for this appointment.</p>
+                        ) : (
+                          <ul>
+                            {existingPrescriptions.map((rx) => (
+                              <li key={rx._id}>
+                                <strong>
+                                  {new Date(rx.createdAt).toLocaleString('en-US', {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short'
+                                  })}
+                                </strong>
+                                <ul style={{ margin: '6px 0 0 0', paddingLeft: 18 }}>
+                                  {(rx.medications || []).map((m, i) => (
+                                    <li key={`${rx._id}-m-${i}`} style={{ marginBottom: 4 }}>
+                                      {m.drugName}
+                                      {m.dosage ? ` · ${m.dosage}` : ''}
+                                      {m.frequency ? ` · ${m.frequency}` : ''}
+                                      {m.duration ? ` · ${m.duration}` : ''}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {rx.generalInstructions ? (
+                                  <p style={{ margin: '8px 0 0 0', color: '#475569' }}>{rx.generalInstructions}</p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {liveAppointmentId && (
             <div id="doctor-section-session" className="card doctor-live-session">
@@ -613,6 +996,14 @@ const DoctorHome = () => {
                   disabled={actionLoadingId === `${selectedAppointment._id}approve` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
                 >
                   {actionLoadingId === `${selectedAppointment._id}approve` ? 'Approving...' : 'Approve Appointment'}
+                </button>
+                <button
+                  type="button"
+                  className="row-action-btn approve"
+                  onClick={() => runAppointmentAction(selectedAppointment._id, 'complete')}
+                  disabled={actionLoadingId === `${selectedAppointment._id}complete` || selectedAppointment.status !== 'confirmed'}
+                >
+                  {actionLoadingId === `${selectedAppointment._id}complete` ? 'Completing...' : 'Mark as Completed'}
                 </button>
                 <button
                   type="button"

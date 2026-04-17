@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 import { createClerkClient } from '@clerk/backend';
 import Patient from '../models/Patient.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -15,6 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const router = express.Router();
+
+const DOCTOR_SERVICE_URL = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
 
 const reportsDir = path.join(__dirname, '..', 'uploads', 'reports');
 if (!fs.existsSync(reportsDir)) {
@@ -330,31 +333,6 @@ router.put('/profile', authMiddleware, async (req, res) => {
     return res.json({ message: 'Profile updated successfully', patient: sanitizePatient(patient) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to update profile', error: error.message });
-  }
-});
-
-// Public doctor directory backed by patient-service test DB users (role=doctor)
-router.get('/doctors/public', async (_req, res) => {
-  try {
-    const doctors = await Patient.find({ role: 'doctor' }).sort({ createdAt: -1 });
-    return res.json({ doctors: doctors.map(toPublicDoctor) });
-  } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch doctors', error: error.message });
-  }
-});
-
-router.get('/doctors/public/:doctorId', async (req, res) => {
-  try {
-    const { doctorId } = req.params;
-    const doctor = await Patient.findOne({ _id: doctorId, role: 'doctor' });
-
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
-
-    return res.json({ doctor: toPublicDoctor(doctor) });
-  } catch (error) {
-    return res.status(500).json({ message: 'Failed to fetch doctor', error: error.message });
   }
 });
 
@@ -694,6 +672,53 @@ router.patch('/notifications/:notificationId/read', authMiddleware, async (req, 
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to update notification' });
+  }
+});
+
+// Internal lookup for notification service
+router.get('/emails/:id', async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id).select('email');
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    res.json({ email: patient.email });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/prescriptions', authMiddleware, async (req, res) => {
+  try {
+    const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient profile not found' });
+    }
+
+    const response = await axios.get(`${DOCTOR_SERVICE_URL}/api/doctor/internal/patient-prescriptions`, {
+      params: { patientId: patient._id }
+    });
+
+    if (!response.data?.success) {
+      return res.status(500).json({ message: response.data?.message || 'Failed to fetch prescriptions' });
+    }
+
+    return res.json({ prescriptions: response.data.prescriptions || [] });
+  } catch (error) {
+    console.error('[patient] prescriptions list', error.message);
+    return res.status(500).json({ message: error.message || 'Failed to fetch prescriptions' });
+  }
+});
+
+router.get('/:id([a-fA-F0-9]{24})', async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id).select('name email');
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    res.json(patient);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 

@@ -1,11 +1,15 @@
 import doctorModel from "../models/Doctor.js";
-import appointmentReadModel from "../models/AppointmentRead.js";
 import mongoose from "mongoose";
 import patientLookupModel from "../models/PatientLookup.js";
+import prescriptionModel from "../models/Prescription.js";
 import { sendNotificationToUser } from "../lib/notificationClient.js";
+import axios from "axios";
+
+const APPOINTMENT_SERVICE_URL = process.env.APPOINTMENT_SERVICE_URL || "http://localhost:8004";
+const PATIENT_SERVICE_URL = process.env.PATIENT_SERVICE_URL || "http://localhost:8002";
 
 const doctorProjection =
-	"name image speciality degree experience about consultationMode available fees address slots_booked status";
+	"name email image speciality degree experience about consultationMode available fees address slots_booked status";
 
 const reportIdKey = (value) => {
 	if (value == null || value === "") return "";
@@ -28,6 +32,7 @@ const normalizeDoctor = (doctor) => ({
 	available: typeof doctor.available === "boolean" ? doctor.available : true,
 	fees: Number.isFinite(Number(doctor.fees)) ? Number(doctor.fees) : 0,
 	address: doctor.address || "",
+	email: doctor.email || "",
 	slots_booked: doctor.slots_booked || {},
 	status: doctor.status || "approved"
 });
@@ -67,15 +72,267 @@ export const getDoctorById = async (req, res) => {
 	}
 };
 
+const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value));
+
+export const getDoctorCompletedAppointments = async (req, res) => {
+	try {
+		const doctorId = req.doctorId;
+		const { dtoken } = req.headers;
+
+		const appointmentsRes = await axios
+			.get(`${APPOINTMENT_SERVICE_URL}/api/appointments?doctorId=${doctorId}&status=completed`, {
+				headers: { dtoken }
+			})
+			.catch((err) => {
+				console.error("Failed to fetch completed appointments:", err.message);
+				return { data: { appointments: [] } };
+			});
+
+		const appointments = appointmentsRes.data?.appointments || [];
+		const sorted = [...appointments].sort((a, b) => {
+			const ta = new Date(`${a.slotDate}T${a.slotTime || "00:00"}:00`).getTime();
+			const tb = new Date(`${b.slotDate}T${b.slotTime || "00:00"}:00`).getTime();
+			return tb - ta;
+		});
+
+		const uniquePatientIds = [...new Set(sorted.map((a) => String(a.patientId)))];
+		const nameEntries = await Promise.all(
+			uniquePatientIds.map(async (pid) => {
+				const patientRes = await axios.get(`${PATIENT_SERVICE_URL}/api/patients/${pid}`).catch(() => ({ data: null }));
+				return [pid, patientRes.data?.name || "Patient"];
+			})
+		);
+		const patientNameMap = Object.fromEntries(nameEntries);
+
+		return res.json({
+			success: true,
+			completedAppointments: sorted.map((appointment) => ({
+				_id: String(appointment.id || appointment._id),
+				patientId: String(appointment.patientId),
+				patientName: patientNameMap[String(appointment.patientId)] || "Patient",
+				slotDate: appointment.slotDate,
+				slotTime: appointment.slotTime,
+				reason: appointment.reason || "",
+				visitMode: appointment.visitMode === "telemedicine" ? "telemedicine" : "in_person",
+				status: appointment.status,
+				paymentStatus: appointment.paymentStatus,
+				amount: appointment.amount
+			}))
+		});
+	} catch (error) {
+		console.log(error);
+		return res.json({ success: false, message: error.message });
+	}
+};
+
+export const listPrescriptionsForAppointment = async (req, res) => {
+	try {
+		const { appointmentId } = req.query;
+		const { dtoken } = req.headers;
+		const doctorId = req.doctorId;
+
+		if (!appointmentId || !isValidObjectId(appointmentId)) {
+			return res.json({ success: false, message: "Valid appointmentId is required" });
+		}
+
+		const appointmentRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+			headers: { dtoken }
+		});
+
+		if (!appointmentRes.data?.appointment) {
+			return res.json({ success: false, message: "Appointment not found" });
+		}
+
+		const appointment = appointmentRes.data.appointment;
+		if (String(appointment.doctorId) !== String(doctorId)) {
+			return res.json({ success: false, message: "Not authorized for this appointment" });
+		}
+
+		const items = await prescriptionModel
+			.find({ doctorId, appointmentId })
+			.sort({ createdAt: -1 })
+			.lean();
+
+		return res.json({
+			success: true,
+			prescriptions: items.map((p) => ({
+				_id: String(p._id),
+				appointmentId: String(p.appointmentId),
+				patientId: String(p.patientId),
+				medications: p.medications || [],
+				generalInstructions: p.generalInstructions || "",
+				createdAt: p.createdAt,
+				updatedAt: p.updatedAt
+			}))
+		});
+	} catch (error) {
+		console.log(error);
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
+	}
+};
+
+export const listPrescriptionsForPatient = async (req, res) => {
+	try {
+		const { patientId } = req.query;
+
+		if (!patientId || !isValidObjectId(patientId)) {
+			return res.json({ success: false, message: "Valid patientId is required" });
+		}
+
+		const items = await prescriptionModel
+			.find({ patientId })
+			.sort({ createdAt: -1 })
+			.lean();
+
+		if (items.length === 0) {
+			return res.json({ success: true, prescriptions: [] });
+		}
+
+		const doctorIds = [...new Set(items.map((p) => String(p.doctorId)))];
+		const doctors = await doctorModel
+			.find({ _id: { $in: doctorIds } })
+			.select("name speciality")
+			.lean();
+		const doctorMap = Object.fromEntries(
+			doctors.map((doc) => [String(doc._id), { name: doc.name || "Doctor", speciality: doc.speciality || "" }])
+		);
+
+		const appointmentIds = [...new Set(items.map((p) => String(p.appointmentId)))];
+		const appointmentDetails = {};
+
+		await Promise.all(
+			appointmentIds.map(async (id) => {
+				const response = await axios
+					.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${id}`)
+					.catch(() => null);
+				if (response?.data?.appointment) {
+					appointmentDetails[id] = response.data.appointment;
+				}
+			})
+		);
+
+		const prescriptions = items.map((p) => {
+			const doctorInfo = doctorMap[String(p.doctorId)] || { name: "Doctor", speciality: "" };
+			const appt = appointmentDetails[String(p.appointmentId)] || {};
+
+			return {
+				_id: String(p._id),
+				doctorId: String(p.doctorId),
+				doctorName: doctorInfo.name,
+				doctorSpeciality: doctorInfo.speciality,
+				appointmentId: String(p.appointmentId),
+				slotDate: appt.slotDate || null,
+				slotTime: appt.slotTime || null,
+				visitMode: appt.visitMode || null,
+				reason: appt.reason || "",
+				medications: p.medications || [],
+				generalInstructions: p.generalInstructions || "",
+				createdAt: p.createdAt,
+				updatedAt: p.updatedAt
+			};
+		});
+
+		return res.json({ success: true, prescriptions });
+	} catch (error) {
+		console.log(error);
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
+	}
+};
+
+export const createDoctorPrescription = async (req, res) => {
+	try {
+		const doctorId = req.doctorId;
+		const { dtoken } = req.headers;
+		const { appointmentId, medications, generalInstructions } = req.body;
+
+		if (!appointmentId || !isValidObjectId(appointmentId)) {
+			return res.json({ success: false, message: "Valid appointmentId is required" });
+		}
+
+		if (!Array.isArray(medications) || medications.length === 0) {
+			return res.json({ success: false, message: "Add at least one medication line" });
+		}
+
+		const appointmentRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+			headers: { dtoken }
+		});
+
+		if (!appointmentRes.data?.appointment) {
+			return res.json({ success: false, message: "Appointment not found" });
+		}
+
+		const appointment = appointmentRes.data.appointment;
+		if (String(appointment.doctorId) !== String(doctorId)) {
+			return res.json({ success: false, message: "Not authorized for this appointment" });
+		}
+
+		if (appointment.status !== "completed") {
+			return res.json({
+				success: false,
+				message: "Prescriptions can only be recorded for appointments marked completed"
+			});
+		}
+
+		const normalizedMeds = medications
+			.map((m) => ({
+				drugName: String(m.drugName || "").trim(),
+				dosage: String(m.dosage || "").trim(),
+				frequency: String(m.frequency || "").trim(),
+				duration: String(m.duration || "").trim(),
+				notes: String(m.notes || "").trim()
+			}))
+			.filter((m) => m.drugName.length > 0);
+
+		if (normalizedMeds.length === 0) {
+			return res.json({ success: false, message: "Each medication needs a drug name" });
+		}
+
+		const created = await prescriptionModel.create({
+			doctorId,
+			patientId: appointment.patientId,
+			appointmentId,
+			medications: normalizedMeds,
+			generalInstructions: String(generalInstructions || "").trim()
+		});
+
+		return res.json({
+			success: true,
+			message: "Prescription saved",
+			prescription: {
+				_id: String(created._id),
+				appointmentId: String(created.appointmentId),
+				patientId: String(created.patientId),
+				medications: created.medications,
+				generalInstructions: created.generalInstructions || "",
+				createdAt: created.createdAt,
+				updatedAt: created.updatedAt
+			}
+		});
+	} catch (error) {
+		console.log(error);
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
+	}
+};
+
 export const getDoctorUpcomingAppointments = async (req, res) => {
 	try {
 		const doctorId = req.doctorId;
+		const { dtoken } = req.headers;
+
 		const doctor = await doctorModel.findById(doctorId).select("name speciality image");
 		if (!doctor) {
 			return res.json({ success: false, message: "Doctor not found" });
 		}
 
-		const appointments = await appointmentReadModel.find({ doctorId }).sort({ slotDate: 1, slotTime: 1, createdAt: -1 });
+		// Fetch all appointments for this doctor via appointment-service API
+		const appointmentsRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments?doctorId=${doctorId}`, {
+			headers: { dtoken }
+		}).catch(err => {
+			console.error("Failed to fetch appointments from service:", err.message);
+			return { data: { appointments: [] } };
+		});
+
+		const appointments = appointmentsRes.data?.appointments || [];
 
 		const now = Date.now();
 		const today = new Date().toISOString().split("T")[0];
@@ -85,10 +342,7 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 			.filter((appointment) => ["pending", "confirmed"].includes(appointment.status) && toTime(appointment) >= now)
 			.slice(0, 10);
 
-		const patientIds = [...new Set(upcomingAppointments.map((item) => String(item.patientId)).filter(Boolean))];
-		const patients = await patientLookupModel.find({ _id: { $in: patientIds } }).select("name email").lean();
-		const patientMap = new Map(patients.map((patient) => [String(patient._id), patient]));
-
+		// Extract patient names if we have them in the response, else lookup locally
 		const stats = {
 			todayAppointments: appointments.filter((appointment) => appointment.slotDate === today && appointment.status !== "cancelled").length,
 			pendingAppointments: appointments.filter((appointment) => appointment.status === "pending").length,
@@ -105,9 +359,9 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 			},
 			stats,
 			upcomingAppointments: upcomingAppointments.map((appointment) => ({
-				_id: String(appointment._id),
+				_id: String(appointment.id || appointment._id),
 				patientId: String(appointment.patientId),
-				patientName: patientMap.get(String(appointment.patientId))?.name || "Patient",
+				patientName: appointment.patientName || "Patient",
 				slotDate: appointment.slotDate,
 				slotTime: appointment.slotTime,
 				reason: appointment.reason || "",
@@ -127,27 +381,37 @@ export const getDoctorUpcomingAppointments = async (req, res) => {
 export const getDoctorAppointmentDetails = async (req, res) => {
 	try {
 		const { appointmentId } = req.params;
-		if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-			return res.json({ success: false, message: "Invalid appointment id" });
-		}
+		const { dtoken } = req.headers;
 
-		const appointment = await appointmentReadModel.findById(appointmentId).lean();
-		if (!appointment) {
+		// Fetch appointment basics from appointment-service
+		const appointmentRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+			headers: { dtoken }
+		});
+
+		if (!appointmentRes.data?.appointment) {
 			return res.json({ success: false, message: "Appointment not found" });
 		}
 
+		const appointment = appointmentRes.data.appointment;
+
+		// Verify this doctor is the one assigned
 		if (String(appointment.doctorId) !== String(req.doctorId)) {
 			return res.json({ success: false, message: "Not authorized for this appointment" });
 		}
 
-		const patient = await patientLookupModel
+		// Fetch basic patient details from patient-service
+		const patientRes = await axios.get(`${PATIENT_SERVICE_URL}/api/patients/${appointment.patientId}`).catch(() => ({ data: null }));
+		const patientBasic = patientRes.data;
+
+		// Fetch extended patient details locally for reports (since doctor-service has the patient-lookup logic)
+		const patientLookup = await patientLookupModel
 			.findById(appointment.patientId)
 			.select("name email reports")
 			.lean();
 
 		const selectedReportIdSet = new Set((appointment.reportIds || []).map((id) => reportIdKey(id)).filter(Boolean));
-		const attachedReports = Array.isArray(patient?.reports)
-			? patient.reports
+		const attachedReports = Array.isArray(patientLookup?.reports)
+			? patientLookup.reports
 					.filter((report) => report?._id != null && selectedReportIdSet.has(reportIdKey(report._id)))
 					.map((report) => ({
 						id: String(report._id),
@@ -164,129 +428,97 @@ export const getDoctorAppointmentDetails = async (req, res) => {
 		return res.json({
 			success: true,
 			appointment: {
-				_id: String(appointment._id),
-				patientId: String(appointment.patientId),
-				patientName: patient?.name || "Patient",
-				patientEmail: patient?.email || "",
-				doctorId: String(appointment.doctorId),
-				slotDate: appointment.slotDate,
-				slotTime: appointment.slotTime,
-				amount: appointment.amount,
-				reason: appointment.reason || "",
-				visitMode: appointment.visitMode === "telemedicine" ? "telemedicine" : "in_person",
-				status: appointment.status,
-				paymentStatus: appointment.paymentStatus,
-				reportIds: (appointment.reportIds || []).map((id) => String(id)),
-				reports: attachedReports,
-				createdAt: appointment.createdAt,
-				updatedAt: appointment.updatedAt
+				...appointment,
+				_id: String(appointment.id || appointment._id),
+				patientName: patientBasic?.name || patientLookup?.name || "Patient",
+				patientEmail: patientBasic?.email || patientLookup?.email || "",
+				reports: attachedReports
 			}
 		});
 	} catch (error) {
 		console.log(error);
-		return res.json({ success: false, message: error.message });
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
 	}
 };
 
 export const approveDoctorAppointment = async (req, res) => {
 	try {
 		const { appointmentId } = req.params;
-		if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-			return res.json({ success: false, message: "Invalid appointment id" });
-		}
+		const { dtoken } = req.headers;
 
-		const appointment = await appointmentReadModel.findById(appointmentId).lean();
-		if (!appointment) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		if (String(appointment.doctorId) !== String(req.doctorId)) {
-			return res.json({ success: false, message: "Not authorized for this appointment" });
-		}
-
-		if (appointment.status === "cancelled" || appointment.status === "completed") {
-			return res.json({ success: false, message: `Cannot approve an appointment with status "${appointment.status}"` });
-		}
-
-		if (appointment.status === "confirmed") {
-			return res.json({ success: false, message: "Appointment is already confirmed" });
-		}
-
-		// updateOne avoids full-document save() issues (e.g. legacy / mixed shapes in appointment-db).
-		const result = await appointmentReadModel.updateOne(
-			{ _id: appointmentId },
-			{ $set: { status: "confirmed" } }
-		);
-
-		if (result.matchedCount === 0) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		const doctor = await doctorModel.findById(req.doctorId).select("name").lean();
-		const rawName = (doctor?.name || "").replace(/^dr\.?\s+/i, "").trim();
-		const doctorLabel = rawName ? `Dr. ${rawName}` : "Your clinician";
-
-		await sendNotificationToUser({
-			recipientId: appointment.patientId,
-			recipientRole: "patient",
-			type: "appointment_confirmed",
-			title: "Appointment confirmed",
-			body: `Your visit on ${appointment.slotDate} at ${appointment.slotTime} was confirmed by ${doctorLabel}.`,
-			appointmentId
+		const response = await axios.patch(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+			status: "confirmed"
+		}, {
+			headers: { dtoken }
 		});
+
+		if (!response.data?.appointment) {
+			throw new Error("Update failed");
+		}
 
 		return res.json({ success: true, message: "Appointment approved", status: "confirmed" });
 	} catch (error) {
 		console.log(error);
-		return res.json({ success: false, message: error.message });
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
 	}
 };
 
 export const cancelDoctorAppointment = async (req, res) => {
 	try {
 		const { appointmentId } = req.params;
-		if (!mongoose.Types.ObjectId.isValid(appointmentId)) {
-			return res.json({ success: false, message: "Invalid appointment id" });
-		}
+		const { dtoken } = req.headers;
 
-		const appointment = await appointmentReadModel.findById(appointmentId).lean();
-		if (!appointment) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		if (String(appointment.doctorId) !== String(req.doctorId)) {
-			return res.json({ success: false, message: "Not authorized for this appointment" });
-		}
-
-		if (appointment.status === "cancelled") {
-			return res.json({ success: false, message: "Appointment already cancelled" });
-		}
-		if (appointment.status === "completed") {
-			return res.json({ success: false, message: "Completed appointments cannot be cancelled" });
-		}
-
-		const result = await appointmentReadModel.updateOne(
-			{ _id: appointmentId },
-			{ $set: { status: "cancelled" } }
-		);
-
-		if (result.matchedCount === 0) {
-			return res.json({ success: false, message: "Appointment not found" });
-		}
-
-		await sendNotificationToUser({
-			recipientId: appointment.patientId,
-			recipientRole: "patient",
-			type: "appointment_cancelled_clinic",
-			title: "Appointment cancelled",
-			body: `Your visit on ${appointment.slotDate} at ${appointment.slotTime} was cancelled by the clinic.`,
-			appointmentId
+		const response = await axios.patch(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}/cancel`, {
+			cancelledBy: "doctor"
+		}, {
+			headers: { dtoken }
 		});
+
+		if (!response.data?.appointment) {
+			throw new Error("Cancellation failed");
+		}
 
 		return res.json({ success: true, message: "Appointment cancelled", status: "cancelled" });
 	} catch (error) {
 		console.log(error);
-		return res.json({ success: false, message: error.message });
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
+	}
+};
+
+export const completeDoctorAppointment = async (req, res) => {
+	try {
+		const { appointmentId } = req.params;
+		const { dtoken } = req.headers;
+
+		const response = await axios.patch(
+			`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`,
+			{ status: "completed" },
+			{ headers: { dtoken } }
+		);
+
+		if (!response.data?.appointment) {
+			throw new Error("Completion failed");
+		}
+
+		return res.json({ success: true, message: "Appointment marked as completed", status: "completed" });
+	} catch (error) {
+		console.log(error);
+		return res.json({ success: false, message: error.response?.data?.message || error.message });
+	}
+};
+
+export const getDoctorEmail = async (req, res) => {
+	try {
+		const { doctorId } = req.params;
+		const doctor = await doctorModel.findById(doctorId).select("email").lean();
+
+		if (!doctor) {
+			return res.status(404).json({ success: false, message: "Doctor not found" });
+		}
+
+		return res.json({ success: true, email: doctor.email });
+	} catch (error) {
+		return res.status(500).json({ success: false, message: error.message });
 	}
 };
 
