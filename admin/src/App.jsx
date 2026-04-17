@@ -17,7 +17,18 @@ import DoctorHome from './pages/DoctorHome';
 import { AdminContext } from './context/AdminContext';
 
 const AccessDenied = () => {
-  const { signOut } = useClerk();
+  const { signOut, openSignIn } = useClerk();
+
+  const handleUseAnotherAccount = async () => {
+    if (typeof openSignIn !== 'function') {
+      return;
+    }
+
+    await openSignIn({
+      forceRedirectUrl: '/signin',
+      fallbackRedirectUrl: '/signin'
+    });
+  };
 
   return (
     <div className="login-container">
@@ -26,6 +37,9 @@ const AccessDenied = () => {
           <h2>Access restricted</h2>
           <p><span>Admin / Doctor</span> accounts only</p>
         </div>
+        <button className="login-btn" onClick={handleUseAnotherAccount}>
+          Use another account
+        </button>
         <button className="login-btn" onClick={() => signOut({ redirectUrl: '/signin' })}>
           Sign out
         </button>

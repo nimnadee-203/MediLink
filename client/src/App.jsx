@@ -194,7 +194,7 @@ const Button = ({ children, variant = 'primary', className, ...props }) => {
 
 function AppContent() {
   const { isSignedIn, getToken } = useAuth();
-  const { signOut } = useClerk();
+  const { signOut, openSignIn } = useClerk();
   const { user } = useUser();
 
   const clerkDisplayName =
@@ -255,6 +255,21 @@ function AppContent() {
 
   const showSuccess = (text) => {
     setMessage({ type: 'success', text });
+  };
+
+  const openPatientSignIn = async () => {
+    try {
+      if (typeof openSignIn !== 'function') {
+        throw new Error('Sign-in modal is not available right now.');
+      }
+
+      await openSignIn({
+        forceRedirectUrl: '/dashboard',
+        fallbackRedirectUrl: '/dashboard'
+      });
+    } catch (error) {
+      showError(error, 'Unable to open account switch. Please try again.');
+    }
   };
 
   const request = async (path, options = {}) => {
@@ -1034,6 +1049,13 @@ function AppContent() {
                     <h3 className="text-xl font-bold text-slate-800">Patient portal only</h3>
                     <p className="text-slate-500 mt-1">This frontend only supports patient accounts. Please sign out and use the correct dashboard.</p>
                     <div className="mt-5 flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={openPatientSignIn}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-all"
+                      >
+                        Use patient account
+                      </button>
                       <button
                         type="button"
                         onClick={() => signOut({ redirectUrl: '/signin' })}
