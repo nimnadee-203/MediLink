@@ -677,6 +677,30 @@ router.get('/profile', authMiddleware, async (req, res) => {
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const updates = (({ name, phone, age, gender, address }) => ({ name, phone, age, gender, address }))(req.body);
+
+    if (updates.gender !== undefined) {
+      const normalizedGender = String(updates.gender || '').trim().toLowerCase();
+      if (!normalizedGender) {
+        updates.gender = undefined;
+      } else if (['male', 'female', 'other'].includes(normalizedGender)) {
+        updates.gender = normalizedGender;
+      } else {
+        return res.status(400).json({ message: 'Invalid gender value. Use male, female, or other.' });
+      }
+    }
+
+    if (updates.age !== undefined) {
+      if (updates.age === '' || updates.age === null) {
+        updates.age = undefined;
+      } else {
+        const parsedAge = Number(updates.age);
+        if (!Number.isFinite(parsedAge) || parsedAge < 0) {
+          return res.status(400).json({ message: 'Invalid age value.' });
+        }
+        updates.age = parsedAge;
+      }
+    }
+
     const account = await resolveCurrentPatient(req.user, getProfileHints(req));
 
     if (!account) {

@@ -321,7 +321,7 @@ function AppContent() {
         name: profileName || '',
         phone: profile?.phone || clerkPhone || '',
         age: profile?.age || '',
-        gender: profile?.gender || '',
+        gender: String(profile?.gender || '').trim().toLowerCase(),
         address: profile?.address || ''
       });
 
@@ -464,7 +464,16 @@ function AppContent() {
     setMessage('');
     try {
       setLoading(true);
-      const payload = { ...profileForm, age: profileForm.age ? Number(profileForm.age) : undefined };
+      const normalizedGender = String(profileForm.gender || '').trim().toLowerCase();
+      const normalizedAge = profileForm.age === '' || profileForm.age === null || profileForm.age === undefined
+        ? undefined
+        : Number(profileForm.age);
+
+      const payload = {
+        ...profileForm,
+        age: Number.isFinite(normalizedAge) ? normalizedAge : undefined,
+        gender: normalizedGender || undefined
+      };
       const data = await request('/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
