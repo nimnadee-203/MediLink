@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: symptom-checker-service
+  labels:
+    app: symptom-checker-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: symptom-checker-service
+  template:
+    metadata:
+      labels:
+        app: symptom-checker-service
+    spec:
+      containers:
+      - name: symptom-checker-service
+        image: medisync-symptom-checker-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8007
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PORT_SYMPTOM
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: MONGODB_URL_SYMPTOM
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: symptom-checker-service
+spec:
+  selector:
+    app: symptom-checker-service
+  ports:
+  - protocol: TCP
+    port: 8007
+    targetPort: 8007
+  type: ClusterIP

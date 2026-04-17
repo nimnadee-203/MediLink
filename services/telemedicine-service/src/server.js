@@ -11,6 +11,12 @@ app.get('/', (req, res) => {
   res.send('Telemedicine Service is running');
 });
 
+import telemedicineRoutes from './routes/telemedicine.routes.js';
+
+app.use(express.json());
+
+app.use('/api/telemedicine', telemedicineRoutes);
+
 const startServer = async () => {
     await connectDB();
     app.listen(port, () => {

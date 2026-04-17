@@ -11,6 +11,7 @@ const port = process.env.PORT || 8000;
 const patientServiceTarget = process.env.PATIENT_SERVICE_URL || 'http://localhost:8002';
 const appointmentServiceTarget = process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:8004';
 const doctorServiceTarget = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
+const telemedicineServiceTarget = process.env.TELEMEDICINE_SERVICE_URL || 'http://localhost:8007';
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 
 let verifyTokenLoader;
@@ -121,6 +122,12 @@ app.use(
 app.use('/api/doctor', createServiceProxy(doctorServiceTarget));
 
 app.use('/api/admin', createServiceProxy(doctorServiceTarget));
+
+app.use(
+  '/api/telemedicine',
+  withAuthContext,
+  createServiceProxy(telemedicineServiceTarget)
+);
 
 app.use(
   '/patient-uploads',

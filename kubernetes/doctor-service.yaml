@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doctor-service
+  labels:
+    app: doctor-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: doctor-service
+  template:
+    metadata:
+      labels:
+        app: doctor-service
+    spec:
+      containers:
+      - name: doctor-service
+        image: medisync-doctor-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 4000
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PORT_DOCTOR
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: MONGODB_URL_DOCTORS
+        - name: ADMIN_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: ADMIN_EMAIL
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: ADMIN_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: JWT_SECRET
+        - name: CLOUDINARY_NAME
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: CLOUDINARY_NAME
+        - name: CLOUDINARY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: CLOUDINARY_API_KEY
+        - name: CLOUDINARY_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: CLOUDINARY_SECRET_KEY
+        - name: CLOUDINARY_URL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: CLOUDINARY_URL
+        - name: APPOINTMENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: APPOINTMENT_SERVICE_URL
+        - name: PATIENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PATIENT_SERVICE_URL
+        - name: NOTIFICATION_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: NOTIFICATION_SERVICE_URL
+        - name: APPOINTMENT_DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: APPOINTMENT_DB_NAME
+        - name: PATIENT_DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PATIENT_DB_NAME
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doctor-service
+spec:
+  selector:
+    app: doctor-service
+  ports:
+  - protocol: TCP
+    port: 4000
+    targetPort: 4000
+  type: ClusterIP

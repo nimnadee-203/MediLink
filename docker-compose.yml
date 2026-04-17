@@ -1,30 +1,147 @@
-version: '3.8'
-
 services:
+  # --- API GATEWAY ---
   api-gateway:
     build: ./api-gateway
     ports:
       - "8000:8000"
     environment:
+      - PORT=8000
+      - PATIENT_SERVICE_URL=http://patient-service:8002
       - APPOINTMENT_SERVICE_URL=http://appointment-service:8004
+      - DOCTOR_SERVICE_URL=http://doctor-service:4000
+      - TELEMEDICINE_SERVICE_URL=http://telemedicine-service:8007
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
     depends_on:
       - auth-service
       - patient-service
       - appointment-service
+      - doctor-service
+      - notification-service
+      - payment-service
+    networks:
+      - medilink-network
 
+  # --- BACKEND SERVICES ---
   auth-service:
     build: ./services/auth-service
     ports:
-      - "8001:8001"
+      - "8008:8008"
+    env_file: ./services/auth-service/.env
+    environment:
+      - PORT=8008
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/auth?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
 
   patient-service:
     build: ./services/patient-service
     ports:
       - "8002:8002"
+    env_file: ./services/patient-service/.env
+    environment:
+      - PORT=8002
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/patients?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
 
   appointment-service:
     build: ./services/appointment-service
     ports:
       - "8004:8004"
+    env_file: ./services/appointment-service/.env
+    environment:
+      - PORT=8004
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/appointments?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
 
-  # ... more services will be added
+  doctor-service:
+    build: ./services/doctor-service
+    ports:
+      - "4000:4000"
+    env_file: ./services/doctor-service/.env
+    environment:
+      - PORT=4000
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8006
+      - APPOINTMENT_DB_NAME=appointments
+      - PATIENT_DB_NAME=patients
+      - APPOINTMENT_SERVICE_URL=http://appointment-service:8004
+      - PATIENT_SERVICE_URL=http://patient-service:8002
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/doctors?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
+
+  notification-service:
+    build: ./services/notification-service
+    ports:
+      - "8006:8006"
+    env_file: ./services/notification-service/.env
+    environment:
+      - PORT=8006
+      - PATIENT_SERVICE_URL=http://patient-service:8002
+      - DOCTOR_SERVICE_URL=http://doctor-service:4000
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/notifications?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
+
+  payment-service:
+    build: ./services/payment-service
+    ports:
+      - "8019:8019"
+    env_file: ./services/payment-service/.env
+    environment:
+      - PORT=8019
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/payments?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
+
+  symptom-checker-service:
+    build: ./services/symptom-checker-service
+    ports:
+      - "8007:8007"
+    environment:
+      - PORT=8007
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/symptom_checker?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
+
+  telemedicine-service:
+    build: ./services/telemedicine-service
+    ports:
+      - "8009:8007"
+    env_file: ./services/telemedicine-service/.env
+    environment:
+      - PORT=8007
+      - MONGODB_URL=mongodb+srv://MediLink:Medi123@medilink.kfrfcd8.mongodb.net/telemedicine?retryWrites=true&w=majority&appName=MediLink
+    networks:
+      - medilink-network
+
+  # --- FRONTEND APPS (Dev Mode) ---
+  client:
+    build: ./client
+    ports:
+      - "5173:5173"
+    env_file: ./client/.env
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    networks:
+      - medilink-network
+
+  admin:
+    build: ./admin
+    ports:
+      - "5174:5174"
+    env_file: ./admin/.env
+    volumes:
+      - ./admin:/app
+      - /app/node_modules
+    networks:
+      - medilink-network
+
+networks:
+  medilink-network:
+    driver: bridge

@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  labels:
+    app: auth-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+      - name: auth-service
+        image: medisync-auth-service:latest
+        imagePullPolicy: IfNotPresent # Crucial for Docker Desktop to use local images
+        ports:
+        - containerPort: 8008
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PORT_AUTH
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: MONGODB_URL_AUTH
+        - name: NOTIFICATION_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: NOTIFICATION_SERVICE_URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+spec:
+  selector:
+    app: auth-service
+  ports:
+  - protocol: TCP
+    port: 8008
+    targetPort: 8008
+  type: ClusterIP

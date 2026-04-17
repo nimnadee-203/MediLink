@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, dtoken, Dtoken, atoken, Atoken, X-Clerk-Email, X-Clerk-Name, X-Clerk-Phone'
   );
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
 
@@ -48,22 +48,14 @@ const startServer = async () => {
     await connectDB();
     dbConnected = true;
   } catch (error) {
-    if (requireDb) {
-      console.error('Failed to start appointment service', error);
-      process.exit(1);
-    }
-
-    console.error(
-      'MongoDB unavailable. Starting appointment service in degraded mode (database routes may fail).'
-    );
-    console.error(error.message);
+    console.error('CRITICAL: Failed to connect to MongoDB Atlas!', error.message);
+    console.error('Check your Atlas IP Whitelist and your .env credentials.');
+    process.exit(1);
   }
 
   app.listen(port, () => {
     console.log(`Appointment Service listening at http://localhost:${port}`);
-    if (!dbConnected) {
-      console.log('Running without MongoDB connection (REQUIRE_DB=false).');
-    }
+    console.log('✅ MongoDB Connection Verified');
   });
 };
 

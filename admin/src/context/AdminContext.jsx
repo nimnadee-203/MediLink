@@ -11,7 +11,7 @@ const AdminContextProvider = (props) => {
     const [doctors, setDoctors] = useState([]);
     const [appointments, setAppointments] = useState([]);
     const [adminEmail, setAdminEmail] = useState(localStorage.getItem('adminEmail') || '');
-    
+
     // Use API gateway when all services go through port 8000: VITE_BACKEND_URL=http://localhost:8000
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
     const gatewayUrl = 'http://localhost:8000';

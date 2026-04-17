@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { connectDB } from "./config/db.js";
 import internalRoutes from "./routes/internal.routes.js";
+import notificationRoutes from './routes/notification.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,7 @@ app.get("/", (_req, res) => {
   res.send("Notification Service is running");
 });
 
+app.use("/api/notifications", notificationRoutes);
 app.use("/internal", internalRoutes);
 
 const startServer = async () => {
