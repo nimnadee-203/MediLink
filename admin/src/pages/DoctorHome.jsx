@@ -517,9 +517,9 @@ const DoctorHome = () => {
             <div>
               <h3>
                 {doctor?.name ? formatDoctorDisplayName(doctor.name) : 'Welcome Doctor'}{' '}
-                <span className="doctor-hello-wave">≡ƒæï</span>
+                <span className="doctor-hello-wave">👋</span>
               </h3>
-              <p>{doctor?.speciality || 'Clinical workspace'} ┬╖ Ready for todayΓÇÖs consultations</p>
+              <p>{doctor?.speciality || 'Clinical workspace'} · Ready for today's consultations</p>
               <small>{upcomingSummary}</small>
             </div>
             <div className="doctor-home-actions">
@@ -615,7 +615,7 @@ const DoctorHome = () => {
                     <li key={aid} className="doctor-home-appointment-item clickable" onClick={() => viewAppointmentDetails(aid)}>
                       <div>
                         <strong>{formatTime12h(apt.slotTime)}</strong>
-                        <span>{formatDate(apt.slotDate)} ┬╖ Rs. {Number(apt.amount || 0).toLocaleString()}</span>
+                        <span>{formatDate(apt.slotDate)} · Rs. {Number(apt.amount || 0).toLocaleString()}</span>
                       </div>
                       <div>
                         <span className={`visit-mode-chip ${apt.visitMode === 'telemedicine' ? 'telemedicine' : 'inperson'}`}>

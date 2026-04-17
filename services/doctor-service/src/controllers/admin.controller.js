@@ -337,14 +337,14 @@ export const adminDashboard = async (req,res)=>{
 
         // Fetch patients from patient-service (Port 8002)
         // Note: We pass the admin token for authorization
-        const patientsRes = await axios.get('http://localhost:8002/api/patients/admin/users', { 
+        const patientsRes = await axios.get(`${process.env.PATIENT_SERVICE_URL || 'http://localhost:8002'}/api/patients/admin/users`, { 
             headers: { atoken } 
         }).catch(() => ({ data: { users: [] } }));
         const patientsCount = patientsRes.data?.users?.length || 0;
 
         // Fetch appointments from appointment-service (Port 8004)
         // The service already returns an 'appointments' array and a 'count'
-        const appointmentsRes = await axios.get('http://localhost:8004/api/appointments', { 
+        const appointmentsRes = await axios.get(`${process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:8004'}/api/appointments`, { 
             headers: { atoken } 
         }).catch(() => ({ data: { appointments: [] } }));
         

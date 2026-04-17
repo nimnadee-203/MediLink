@@ -234,8 +234,8 @@ export const listAppointments = async (req, res) => {
       try {
         // Fetch doctors and patients in parallel
         const [doctorsRes, patientsRes] = await Promise.all([
-          axios.post('http://localhost:4000/api/admin/all-doctors', {}, { headers: { atoken } }).catch(() => ({ data: { success: false } })),
-          axios.get('http://localhost:8002/api/patients/admin/users', { headers: { atoken } }).catch(() => ({ data: { success: false } }))
+          axios.post(`${process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000'}/api/admin/all-doctors`, {}, { headers: { atoken } }).catch(() => ({ data: { success: false } })),
+          axios.get(`${process.env.PATIENT_SERVICE_URL || 'http://localhost:8002'}/api/patients/admin/users`, { headers: { atoken } }).catch(() => ({ data: { success: false } }))
         ]);
 
         const doctorsMap = {};
