@@ -11,45 +11,56 @@ const AdminProfile = () => {
 
   return (
     <div className="admin-profile-page">
-      <h2 className="page-title">Admin Profile</h2>
+      <div className="card profile-hero">
+        <div>
+          <h2 className="page-title">Admin Profile</h2>
+          <p>Manage your verified account details and personal information.</p>
+        </div>
+      </div>
 
-      <div className="card users-form-card">
-        <h3>Profile Details</h3>
+      <div className="card users-form-card profile-premium-card">
+        <div className="profile-card-head">
+          <h3>Profile Details</h3>
+          <p>Your email is verified through Clerk and cannot be edited here.</p>
+        </div>
 
-        <form onSubmit={onSubmit} className="doctor-form-grid">
-          <div className="form-item">
+        <form onSubmit={onSubmit} className="doctor-form-grid profile-form-grid">
+          <div className="form-item form-item-full profile-field profile-verified">
             <p>Verified Email</p>
             <input value={clerkEmail || ''} readOnly disabled />
           </div>
 
-          <div className="form-item">
+          <div className="form-item profile-field">
             <p>Full Name</p>
             <input
               value={profileForm.name}
               onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter your full name"
               required
             />
           </div>
 
-          <div className="form-item">
+          <div className="form-item profile-field">
             <p>Phone</p>
             <input
               value={profileForm.phone}
               onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+              placeholder="Enter phone number"
             />
           </div>
 
-          <div className="form-item">
+          <div className="form-item profile-field">
             <p>Age</p>
             <input
               type="number"
               min="0"
               value={profileForm.age}
               onChange={(e) => setProfileForm((prev) => ({ ...prev, age: e.target.value }))}
+              placeholder="Enter age"
             />
           </div>
 
-          <div className="form-item">
+          <div className="form-item profile-field">
             <p>Gender</p>
             <select
               value={profileForm.gender}
@@ -62,17 +73,20 @@ const AdminProfile = () => {
             </select>
           </div>
 
-          <div className="form-item form-item-full">
+          <div className="form-item form-item-full profile-field">
             <p>Address</p>
             <input
               value={profileForm.address}
               onChange={(e) => setProfileForm((prev) => ({ ...prev, address: e.target.value }))}
+              placeholder="Enter address"
             />
           </div>
 
-          <button className="add-doctor-btn" type="submit" disabled={loading}>
-            {loading ? 'Saving...' : 'Save Profile'}
-          </button>
+          <div className="users-edit-actions profile-actions">
+            <button className="users-btn users-btn-primary profile-save-btn" type="submit" disabled={loading}>
+              {loading ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
         </form>
       </div>
     </div>
