@@ -6,7 +6,10 @@
     "prestart": "node scripts/free-port.js",
     "start": "node src/server.js",
     "predev": "node scripts/free-port.js",
-    "dev": "node src/server.js"
+    "dev": "node src/server.js",
+    "migrate:legacy-users": "node scripts/migrate-legacy-users.js",
+    "migrate:legacy-users:cleanup": "node scripts/migrate-legacy-users.js --drop-test-dbs",
+    "check:domain-data": "node scripts/check-domain-data.js"
   },
   "dependencies": {
     "@clerk/backend": "^1.22.0",

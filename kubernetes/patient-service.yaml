@@ -42,6 +42,16 @@ spec:
             secretKeyRef:
               name: medisync-secrets
               key: MONGODB_URL_PATIENTS
+        - name: PATIENT_DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PATIENT_DB_NAME
+        - name: ADMIN_DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: ADMIN_DB_NAME
         - name: NOTIFICATION_SERVICE_URL
           valueFrom:
             configMapKeyRef:

@@ -1,8 +1,16 @@
 import React, { useContext } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { AdminContext } from '../context/AdminContext';
 
 const Navbar = () => {
-  const { logout, adminEmail } = useContext(AdminContext);
+  const { logout } = useContext(AdminContext);
+  const { user } = useUser();
+
+  const userEmail = user?.primaryEmailAddress?.emailAddress || '';
+  const userName =
+    user?.fullName ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() ||
+    'Admin';
 
   return (
     <header className="navbar">
@@ -12,9 +20,9 @@ const Navbar = () => {
 
       <div className="navbar-user-profile">
         <div className="avatar">
-          {adminEmail ? adminEmail.charAt(0).toUpperCase() : 'A'}
+          {userName.charAt(0).toUpperCase()}
         </div>
-        {adminEmail && <span className="user-email">{adminEmail}</span>}
+        {userEmail && <span className="user-email">{userEmail}</span>}
         <button className="logout-btn" onClick={logout}>
           Logout
         </button>
