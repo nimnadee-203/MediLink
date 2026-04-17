@@ -22,7 +22,7 @@ app.use(
   cors({
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'dtoken', 'atoken', 'Dtoken', 'Atoken']
+    allowedHeaders: ['Content-Type', 'Authorization', 'dtoken', 'atoken', 'Dtoken', 'Atoken', 'X-Clerk-Email', 'X-Clerk-Name', 'X-Clerk-Phone']
   })
 )
 

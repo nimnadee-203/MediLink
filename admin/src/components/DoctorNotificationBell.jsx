@@ -14,17 +14,18 @@ function formatTime(iso) {
 }
 
 export default function DoctorNotificationBell() {
-  const { backendUrl, dToken } = useContext(AdminContext);
+  const { backendUrl, getDoctorAuthHeaders, isDoctorUser } = useContext(AdminContext);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [unread, setUnread] = useState(0);
   const wrapRef = useRef(null);
 
   const load = async () => {
-    if (!dToken) return;
+    if (!isDoctorUser) return;
     try {
+      const headers = await getDoctorAuthHeaders();
       const { data } = await axios.get(`${backendUrl}/api/doctor/notifications`, {
-        headers: { dtoken: dToken }
+        headers
       });
       setItems(Array.isArray(data.notifications) ? data.notifications : []);
       setUnread(Number(data.unreadCount) || 0);
@@ -39,7 +40,7 @@ export default function DoctorNotificationBell() {
     load();
     const id = setInterval(load, 45000);
     return () => clearInterval(id);
-  }, [dToken, backendUrl]);
+  }, [isDoctorUser, backendUrl, getDoctorAuthHeaders]);
 
   useEffect(() => {
     const onDoc = (e) => {
@@ -52,12 +53,13 @@ export default function DoctorNotificationBell() {
   }, []);
 
   const onMarkRead = async (id) => {
-    if (!dToken) return;
+    if (!isDoctorUser) return;
     try {
+      const headers = await getDoctorAuthHeaders();
       await axios.patch(
         `${backendUrl}/api/doctor/notifications/${encodeURIComponent(id)}/read`,
         {},
-        { headers: { dtoken: dToken } }
+        { headers }
       );
       await load();
     } catch {
@@ -65,7 +67,7 @@ export default function DoctorNotificationBell() {
     }
   };
 
-  if (!dToken) return null;
+  if (!isDoctorUser) return null;
 
   return (
     <div className="notification-bell-wrap" ref={wrapRef}>

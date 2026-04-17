@@ -1,6 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
 import { AdminContext } from '../context/AdminContext';
 import DoctorNotificationBell from '../components/DoctorNotificationBell';
 
@@ -40,8 +39,7 @@ function formatDoctorDisplayName(name, fallback = 'Doctor') {
 }
 
 const DoctorHome = () => {
-  const navigate = useNavigate();
-  const { setDToken, dToken, backendUrl } = useContext(AdminContext);
+  const { backendUrl, getDoctorAuthHeaders, logout, isDoctorUser } = useContext(AdminContext);
   const jitsiContainerRef = useRef(null);
   const jitsiApiRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -64,9 +62,7 @@ const DoctorHome = () => {
   const [actionMessage, setActionMessage] = useState('');
 
   const onLogout = () => {
-    localStorage.removeItem('dToken');
-    setDToken('');
-    navigate('/');
+    logout();
   };
 
   const formatTime12h = (time24 = '') => {
@@ -98,8 +94,9 @@ const DoctorHome = () => {
     try {
       setLoading(true);
       setError('');
+      const headers = await getDoctorAuthHeaders();
       const { data } = await axios.get(`${backendUrl}/api/doctor/appointments/upcoming`, {
-        headers: { dtoken: dToken }
+        headers
       });
 
       if (!data.success) {
@@ -118,12 +115,12 @@ const DoctorHome = () => {
   };
 
   useEffect(() => {
-    if (!dToken) {
+    if (!isDoctorUser) {
       setLoading(false);
       return;
     }
     loadDoctorHome();
-  }, [dToken]);
+  }, [isDoctorUser, getDoctorAuthHeaders, backendUrl]);
 
   const upcomingSummary = useMemo(() => {
     if (upcomingAppointments.length === 0) return 'No upcoming appointments.';
@@ -271,8 +268,9 @@ const DoctorHome = () => {
     try {
       setDetailsLoadingId(appointmentId);
       setActionError('');
+      const headers = await getDoctorAuthHeaders();
       const { data } = await axios.get(`${backendUrl}/api/doctor/appointments/${appointmentId}`, {
-        headers: { dtoken: dToken }
+        headers
       });
       if (!data.success) {
         throw new Error(data.message || 'Failed to load appointment details');
@@ -290,8 +288,9 @@ const DoctorHome = () => {
       setActionLoadingId(appointmentId + action);
       setActionError('');
       setActionMessage('');
+      const headers = await getDoctorAuthHeaders();
       const { data } = await axios.patch(`${backendUrl}/api/doctor/appointments/${appointmentId}/${action}`, {}, {
-        headers: { dtoken: dToken }
+        headers
       });
 
       if (!data.success) {
@@ -303,7 +302,7 @@ const DoctorHome = () => {
       await loadDoctorHome();
       if (selectedAppointment?._id === appointmentId) {
         const refreshed = await axios.get(`${backendUrl}/api/doctor/appointments/${appointmentId}`, {
-          headers: { dtoken: dToken }
+          headers
         });
         if (refreshed?.data?.success) {
           setSelectedAppointment(refreshed.data.appointment || null);

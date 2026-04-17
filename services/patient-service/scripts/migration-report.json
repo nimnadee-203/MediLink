@@ -1,0 +1,29 @@
+{
+  "executedAt": "2026-04-17T05:28:26.803Z",
+  "migration": {
+    "scanned": 17,
+    "createdPatients": 0,
+    "createdAdmins": 3,
+    "movedToAdmin": 0,
+    "alreadyExists": 14,
+    "skipped": 0,
+    "sourceDbs": [
+      "test",
+      "medilink",
+      "admins",
+      "admin_1",
+      "test-patient",
+      "test-patiend",
+      "patients"
+    ]
+  },
+  "cleanup": {
+    "dropped": [
+      "test"
+    ],
+    "missing": [
+      "test-patient",
+      "test-patiend"
+    ]
+  }
+}

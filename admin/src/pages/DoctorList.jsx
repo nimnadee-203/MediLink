@@ -3,14 +3,14 @@ import { AdminContext } from '../context/AdminContext';
 import { useNavigate } from 'react-router-dom';
 
 const DoctorList = () => {
-  const { doctors, getAllDoctors, aToken, changeAvailability } = useContext(AdminContext);
+  const { doctors, getAllDoctors, changeAvailability, isAdminUser, profileLoaded } = useContext(AdminContext);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (aToken) {
+    if (profileLoaded && isAdminUser) {
       getAllDoctors();
     }
-  }, [aToken]);
+  }, [profileLoaded, isAdminUser, getAllDoctors]);
 
   return (
     <div className="doctor-list-wrapper">

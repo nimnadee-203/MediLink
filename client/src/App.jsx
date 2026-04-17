@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Link,
   Navigate,
@@ -33,11 +33,12 @@ import DoctorsList from './pages/DoctorsList';
 import BookAppointment from './pages/BookAppointment';
 import MyAppointments from './pages/MyAppointments';
 import TelemedicineSession from './pages/TelemedicineSession';
-import PaymentPage from './pages/PaymentPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import SymptomCheckerPage from './pages/SymptomCheckerPage';
 import { appointmentRequest } from './lib/api';
 import NotificationBell from './components/NotificationBell';
+
+const PaymentPage = React.lazy(() => import('./pages/PaymentPage'));
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -323,8 +324,11 @@ function AppContent() {
         gender: profile?.gender || '',
         address: profile?.address || ''
       });
+
+      return profile;
     } catch (err) {
       showError(err, 'Failed to fetch profile');
+      return null;
     } finally {
       setIsRoleResolved(true);
       setLoading(false);
@@ -373,20 +377,20 @@ function AppContent() {
     if (shouldLoadProtectedData) {
       setIsRoleResolved(false);
       const loadProtectedData = async () => {
-        await fetchProfile();
-        await fetchReports();
+        const profile = await fetchProfile();
+        const resolvedRole = normalizeRole(profile?.role);
+
+        if (resolvedRole === 'patient') {
+          await fetchReports();
+        } else {
+          setReports([]);
+        }
       };
       loadProtectedData();
     } else {
       setIsRoleResolved(true);
     }
-  }, [isSignedIn, location.pathname]);
-
-  useEffect(() => {
-    if (isSignedIn && effectiveRole === 'admin' && location.pathname === '/dashboard') {
-      fetchAdminUsers();
-    }
-  }, [isSignedIn, effectiveRole, location.pathname]);
+  }, [isSignedIn, user?.id, location.pathname]);
 
   useEffect(() => {
     setAdminSection('overview');
@@ -948,342 +952,47 @@ function AppContent() {
                     <h3 className="text-xl font-bold text-slate-800">Loading your dashboard...</h3>
                     <p className="text-slate-500 mt-1">Preparing role-based workspace.</p>
                   </Card>
-                ) : effectiveRole === 'admin' ? (
-                  <div className="grid lg:grid-cols-[260px_1fr] gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <Card className="p-4 border-slate-200/60 sticky top-24 h-max bg-white/80 backdrop-blur-xl">
-                      <div className="mb-6 px-3">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Admin Panel</h3>
-                        <p className="text-slate-800 font-semibold tracking-tight">Management Console</p>
-                      </div>
-                      <div className="space-y-1.5 focus:outline-none">
-                        <button
-                          type="button"
-                          className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', adminSection === 'overview' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                          onClick={() => setAdminSection('overview')}
+                ) : effectiveRole !== 'patient' ? (
+                  <Card className="max-w-2xl mx-auto text-center py-12">
+                    <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+                      <Shield size={26} />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800">Patient portal only</h3>
+                    <p className="text-slate-500 mt-1">This frontend only supports patient accounts. Please sign out and use the correct dashboard.</p>
+                    <div className="mt-5 flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => signOut({ redirectUrl: '/signin' })}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-900 transition-all"
+                      >
+                        Sign out
+                      </button>
+                      {effectiveRole === 'admin' && (
+                        <a
+                          href="http://localhost:5174/signin"
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-all"
                         >
-                          <Shield size={18} className={adminSection === 'overview' ? 'text-indigo-600' : 'text-slate-400'} /> Dashboard Overview
-                        </button>
-                        {hasPrivilege('manage_user_accounts') && (
-                          <button
-                            type="button"
-                            className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', adminSection === 'users' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                            onClick={() => setAdminSection('users')}
-                          >
-                            <Users size={18} className={adminSection === 'users' ? 'text-indigo-600' : 'text-slate-400'} /> User Management
-                          </button>
-                        )}
-                        {hasPrivilege('verify_doctor_registrations') && (
-                          <button
-                            type="button"
-                            className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', adminSection === 'doctor-verification' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                            onClick={() => setAdminSection('doctor-verification')}
-                          >
-                            <Stethoscope size={18} className={adminSection === 'doctor-verification' ? 'text-indigo-600' : 'text-slate-400'} /> Doctor Verification
-                          </button>
-                        )}
-                        {hasPrivilege('platform_operations') && (
-                          <button
-                            type="button"
-                            className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', adminSection === 'operations' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                            onClick={() => setAdminSection('operations')}
-                          >
-                            <Settings size={18} className={adminSection === 'operations' ? 'text-indigo-600' : 'text-slate-400'} /> Platform Operations
-                          </button>
-                        )}
-                        {hasPrivilege('manage_profile') && (
-                          <button
-                            type="button"
-                            className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', adminSection === 'profile' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                            onClick={() => setAdminSection('profile')}
-                          >
-                            <User size={18} className={adminSection === 'profile' ? 'text-indigo-600' : 'text-slate-400'} /> Admin Profile
-                          </button>
-                        )}
-                      </div>
-                    </Card>
-
-                    <div className="space-y-8">
-                      {adminSection === 'overview' && (
-                        <>
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200/60">
-                            <div>
-                              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Admin Dashboard</h2>
-                              <p className="text-slate-500 text-sm font-medium mt-1">Manage users and roles for the MediSync AI platform.</p>
-                            </div>
-                          </div>
-                          
-                          <div className="grid md:grid-cols-4 gap-6">
-                            <Card className="p-6 relative overflow-hidden group">
-                               <div className="h-1 bg-indigo-500 absolute top-0 left-0 w-full opacity-50"></div>
-                              <p className="text-sm font-medium text-slate-500 mb-2">Total Users</p>
-                              <p className="text-4xl font-extrabold text-slate-800 tracking-tight">{adminUsers.length}</p>
-                            </Card>
-                            <Card className="p-6 relative overflow-hidden group">
-                               <div className="h-1 bg-emerald-500 absolute top-0 left-0 w-full opacity-50"></div>
-                              <p className="text-sm font-medium text-slate-500 mb-2">Admins</p>
-                              <p className="text-4xl font-extrabold text-emerald-600 tracking-tight">{adminUsers.filter((u) => u.role === 'admin').length}</p>
-                            </Card>
-                            <Card className="p-6 relative overflow-hidden group">
-                               <div className="h-1 bg-amber-500 absolute top-0 left-0 w-full opacity-50"></div>
-                              <p className="text-sm font-medium text-slate-500 mb-2">Doctors</p>
-                              <p className="text-4xl font-extrabold text-amber-600 tracking-tight">{adminUsers.filter((u) => u.role === 'doctor').length}</p>
-                            </Card>
-                            <Card className="p-6 relative overflow-hidden group">
-                               <div className="h-1 bg-blue-500 absolute top-0 left-0 w-full opacity-50"></div>
-                              <p className="text-sm font-medium text-slate-500 mb-2">Patients</p>
-                              <p className="text-4xl font-extrabold text-blue-600 tracking-tight">{adminUsers.filter((u) => (u.role || 'patient') === 'patient').length}</p>
-                            </Card>
-                          </div>
-                        </>
-                      )}
-
-                      {adminSection === 'users' && (
-                        <div className="space-y-6">
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200/60">
-                            <div>
-                              <h3 className="text-xl font-bold text-slate-800 tracking-tight">Active Users</h3>
-                              <p className="text-sm text-slate-500 font-medium mt-1">Manage system access, update details, or assign roles.</p>
-                            </div>
-                            <Button type="button" onClick={() => setIsCreateUserModalOpen(true)} disabled={loading} className="px-5 py-3 shadow-indigo-600/30 w-full sm:w-auto">
-                              <Users size={18} /> Create New User
-                            </Button>
-                          </div>
-
-                          <div className="grid gap-4">
-                            {adminUsers.map((adminUser) => (
-                              <div key={adminUser.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-6 group">
-                                
-                                <div className="flex items-center gap-4 min-w-0">
-                                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-100 to-blue-100 flex items-center justify-center text-indigo-600 font-extrabold text-lg shrink-0 border border-indigo-200/50">
-                                    {(adminUser.name || 'U').charAt(0).toUpperCase()}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h4 className="font-bold text-slate-800 text-lg truncate flex items-center gap-2">
-                                      {adminUser.name}
-                                      <span className={cn(
-                                        "px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest",
-                                        (adminUser.role || 'patient') === 'admin' ? "bg-emerald-100 text-emerald-700 border border-emerald-200" :
-                                        (adminUser.role || 'patient') === 'doctor' ? "bg-amber-100 text-amber-700 border border-amber-200" : "bg-blue-100 text-blue-700 border border-blue-200"
-                                      )}>
-                                        {adminUser.role || 'patient'}
-                                      </span>
-                                    </h4>
-                                    <div className="flex items-center gap-3 text-sm font-medium text-slate-500 mt-1">
-                                      <span className="truncate flex items-center gap-1.5"><Activity size={14} className="text-slate-400" /> {adminUser.email?.endsWith('@clerk.local') ? <span className="italic text-slate-400">Syncing email…</span> : adminUser.email}</span>
-                                      {adminUser.phone && <span className="hidden sm:flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-md"><Smartphone size={14} className="text-slate-400" /> {adminUser.phone}</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-3 bg-slate-50 p-2 md:p-1.5 rounded-xl md:rounded-lg border border-slate-100 md:border-transparent md:bg-transparent">
-                                  <select
-                                    className="rounded-lg border border-slate-200 bg-white py-2 px-3 text-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none cursor-pointer hover:border-indigo-300"
-                                    value={adminUser.role || 'patient'}
-                                    onChange={(e) => onChangeUserRole(adminUser.id, e.target.value)}
-                                    disabled={loading}
-                                  >
-                                    <option value="patient">Patient Role</option>
-                                    <option value="doctor">Doctor Role</option>
-                                    <option value="admin">Admin Role</option>
-                                  </select>
-                                  <div className="w-px h-6 bg-slate-200 mx-1 hidden md:block"></div>
-                                  <button type="button" className="text-slate-500 hover:text-indigo-600 p-2 rounded-lg hover:bg-indigo-50 transition-colors" onClick={() => onStartEditAdminUser(adminUser)} disabled={loading} title="Edit User">
-                                    <Settings size={18} />
-                                  </button>
-                                  <button type="button" className="text-slate-500 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition-colors" onClick={() => onDeleteAdminUser(adminUser.id)} disabled={loading} title="Delete User">
-                                    <AlertCircle size={18} />
-                                  </button>
-                                </div>
-
-                              </div>
-                            ))}
-                            {adminUsers.length === 0 && (
-                              <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-                                <Users className="mx-auto text-slate-300 mb-3" size={48} />
-                                <h4 className="text-slate-800 font-bold mb-1">No users found</h4>
-                                <p className="text-slate-500 text-sm">Create a new user to populate this directory.</p>
-                              </div>
-                            )}
-                          </div>
-
-                          {isCreateUserModalOpen && (
-                            <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                              <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 md:p-8 animate-in zoom-in-95 duration-200">
-                                <div className="flex items-center justify-between mb-8">
-                                  <div>
-                                    <h4 className="text-2xl font-bold text-slate-800 tracking-tight">Create New User</h4>
-                                    <p className="text-slate-500 text-sm font-medium mt-1">Add a new patient, doctor, or administrator.</p>
-                                  </div>
-                                  <button type="button" className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={() => setIsCreateUserModalOpen(false)}>✕</button>
-                                </div>
-                                <form onSubmit={onCreateAdminUser} className="grid md:grid-cols-2 gap-4">
-                                  <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
-                                    <Input placeholder="e.g. Jane Doe" value={adminNewUser.name} onChange={(e) => setAdminNewUser((prev) => ({ ...prev, name: e.target.value }))} required />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Username</label>
-                                    <Input
-                                      placeholder="e.g. jane.doe"
-                                      value={adminNewUser.username}
-                                      onChange={(e) => setAdminNewUser((prev) => ({ ...prev, username: e.target.value }))}
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
-                                    <Input type="email" placeholder="jane@example.com" value={adminNewUser.email} onChange={(e) => setAdminNewUser((prev) => ({ ...prev, email: e.target.value }))} required />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
-                                    <Input placeholder="(555) 000-0000" value={adminNewUser.phone} onChange={(e) => setAdminNewUser((prev) => ({ ...prev, phone: e.target.value }))} />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Temporary Password</label>
-                                    <Input
-                                      type="password"
-                                      minLength={8}
-                                      placeholder="At least 8 characters"
-                                      value={adminNewUser.password}
-                                      onChange={(e) => setAdminNewUser((prev) => ({ ...prev, password: e.target.value }))}
-                                      required
-                                    />
-                                  </div>
-                                  <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Assign Role</label>
-                                    <select
-                                      className="block w-full rounded-xl border-slate-200 bg-slate-50/50 border py-3 px-4 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 outline-none my-1"
-                                      value={adminNewUser.role}
-                                      onChange={(e) => setAdminNewUser((prev) => ({ ...prev, role: e.target.value }))}
-                                    >
-                                      <option value="patient">Patient (Default)</option>
-                                      <option value="doctor">Doctor</option>
-                                      <option value="admin">Administrator</option>
-                                    </select>
-                                  </div>
-                                  <div className="md:col-span-2 flex justify-end gap-3 pt-6 border-t border-slate-100 mt-2">
-                                    <Button type="button" variant="secondary" onClick={() => setIsCreateUserModalOpen(false)} disabled={loading}>Cancel</Button>
-                                    <Button type="submit" disabled={loading} className="px-8 shadow-indigo-600/30">{loading ? 'Creating...' : 'Create Record'}</Button>
-                                  </div>
-                                </form>
-                              </div>
-                            </div>
-                          )}
-
-                          {isEditUserModalOpen && editingAdminUserId && (
-                            <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                              <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 p-6 md:p-8 animate-in zoom-in-95 duration-200">
-                                <div className="flex items-center justify-between mb-8">
-                                  <div>
-                                    <h4 className="text-2xl font-bold text-slate-800 tracking-tight">Edit User Profile</h4>
-                                    <p className="text-slate-500 text-sm font-medium mt-1">Modify details for {adminEditForm.name || 'this user'}.</p>
-                                  </div>
-                                  <button type="button" className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={onCancelEditAdminUser}>✕</button>
-                                </div>
-                                <form onSubmit={(e) => { e.preventDefault(); onSaveAdminUser(editingAdminUserId); }} className="grid md:grid-cols-2 gap-4">
-                                  <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
-                                    <Input placeholder="Update full name" value={adminEditForm.name} onChange={(e) => setAdminEditForm((prev) => ({ ...prev, name: e.target.value }))} required />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
-                                    <Input type="email" placeholder="Update email" value={adminEditForm.email} onChange={(e) => setAdminEditForm((prev) => ({ ...prev, email: e.target.value }))} required />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
-                                    <Input placeholder="Update phone" value={adminEditForm.phone} onChange={(e) => setAdminEditForm((prev) => ({ ...prev, phone: e.target.value }))} />
-                                  </div>
-                                  <div className="md:col-span-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">User Role</label>
-                                    <select 
-                                      className="block w-full rounded-xl border-slate-200 bg-slate-50/50 border py-3 px-4 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all my-1 outline-none" 
-                                      value={adminEditForm.role} 
-                                      onChange={(e) => setAdminEditForm((prev) => ({ ...prev, role: e.target.value }))}
-                                    >
-                                      <option value="patient">Patient</option>
-                                      <option value="doctor">Doctor</option>
-                                      <option value="admin">Administrator</option>
-                                    </select>
-                                  </div>
-                                  <div className="md:col-span-2 flex justify-end gap-3 pt-6 border-t border-slate-100 mt-2">
-                                    <Button type="button" variant="secondary" onClick={onCancelEditAdminUser} disabled={loading}>Cancel</Button>
-                                    <Button type="submit" disabled={loading} className="px-8 shadow-indigo-600/30">{loading ? 'Saving...' : 'Save Changes'}</Button>
-                                  </div>
-                                </form>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {adminSection === 'doctor-verification' && hasPrivilege('verify_doctor_registrations') && (
-                        <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
-                          <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Doctor Registration Verification</h3>
-                          <p className="text-slate-500 font-medium text-sm mt-1">Approve or reject new doctor registrations after compliance checks.</p>
-                          <div className="mt-6 p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <p className="text-slate-700 font-medium">Verification queue UI will be integrated here after merge.</p>
-                          </div>
-                        </Card>
-                      )}
-
-                      {adminSection === 'operations' && hasPrivilege('platform_operations') && (
-                        <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
-                          <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Platform Operations</h3>
-                          <p className="text-slate-500 font-medium text-sm mt-1">Monitor platform health, operational actions, and system-level controls.</p>
-                          <div className="mt-6 p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <p className="text-slate-700 font-medium">Operations widgets can be merged into this safe role-gated section.</p>
-                          </div>
-                        </Card>
-                      )}
-
-                      {adminSection === 'profile' && (
-                        <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
-                          <div className="mb-8">
-                            <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Admin Profile Settings</h3>
-                            <p className="text-slate-500 font-medium text-sm mt-1">Manage your administrative contact details and personal info.</p>
-                          </div>
-                          <form onSubmit={onSaveProfile} className="space-y-6">
-                            <div className="grid md:grid-cols-2 gap-x-6 gap-y-5">
-                              <div className="md:col-span-2 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 mb-2">
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Account Email (Verified via Clerk)</label>
-                                <Input value={visibleEmail} readOnly disabled className="bg-white/50 border-slate-200 text-slate-600 mb-0 opacity-80 cursor-not-allowed" />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
-                                <Input icon={User} placeholder="Enter your full name" value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} className="mb-0" />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Contact Number</label>
-                                <Input icon={Smartphone} placeholder="Enter phone number" value={profileForm.phone} onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })} className="mb-0" />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Age</label>
-                                <Input icon={Calendar} type="number" min="0" placeholder="e.g. 35" value={profileForm.age} onChange={(e) => setProfileForm({ ...profileForm, age: e.target.value })} className="mb-0" />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
-                                <select className="block w-full rounded-xl border-slate-200 bg-slate-50/50 border py-3 px-4 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 outline-none my-1" value={profileForm.gender} onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}>
-                                  <option value="">Select Gender</option>
-                                  <option value="male">Male</option>
-                                  <option value="female">Female</option>
-                                  <option value="other">Other</option>
-                                </select>
-                              </div>
-                              <div className="md:col-span-2">
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Current Address</label>
-                                <Input icon={MapPin} placeholder="Enter your full residential address" value={profileForm.address} onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })} className="mb-0" />
-                              </div>
-                            </div>
-                            <div className="pt-6 mt-4 border-t border-slate-100 flex justify-end">
-                              <Button type="submit" disabled={loading} className="w-full md:w-auto px-10 shadow-indigo-600/30 text-base py-3">
-                                {loading ? 'Saving securely...' : 'Save Profile Details'}
-                              </Button>
-                            </div>
-                          </form>
-                        </Card>
+                          Open Admin App
+                        </a>
                       )}
                     </div>
-                  </div>
+                  </Card>
+                ) : effectiveRole === 'admin' ? (
+                  <Card className="max-w-2xl mx-auto text-center py-12">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-4">
+                      <Shield size={26} />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800">Admin dashboard moved</h3>
+                    <p className="text-slate-500 mt-1">Use the dedicated Admin frontend to manage users and profile details.</p>
+                    <div className="mt-5">
+                      <a
+                        href="http://localhost:5174/signin"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-all"
+                      >
+                        Open Admin App
+                      </a>
+                    </div>
+                  </Card>
                 ) : effectiveRole === 'doctor' ? (
                   <div className="grid lg:grid-cols-[260px_1fr] gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <Card className="p-4 border-slate-200/60 sticky top-24 h-max bg-white/80 backdrop-blur-xl">
@@ -1939,7 +1648,16 @@ function AppContent() {
             element={
               isSignedIn ? (
                 effectiveRole === 'patient' ? (
-                  <PaymentPage />
+                  <Suspense
+                    fallback={
+                      <Card className="max-w-2xl mx-auto text-center py-12">
+                        <h3 className="text-xl font-bold text-slate-800">Loading payment module…</h3>
+                        <p className="text-slate-500 mt-1">Preparing secure checkout.</p>
+                      </Card>
+                    }
+                  >
+                    <PaymentPage />
+                  </Suspense>
                 ) : (
                   <Navigate to="/dashboard" replace />
                 )

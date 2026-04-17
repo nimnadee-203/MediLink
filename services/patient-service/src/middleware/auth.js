@@ -14,6 +14,19 @@ const getClerkSecretKey = () => {
   return secretKey;
 };
 
+const getPrimaryAdminEmail = () => {
+  const candidates = [
+    ...(process.env.ADMIN_EMAILS || '').split(','),
+    process.env.ADMIN_EMAIL,
+    'admin@medisync.ai',
+    'it23589254@my.sliit.lk'
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  return candidates[0] || 'admin@medisync.ai';
+};
+
 const decodeJwtPayloadUnsafe = (token) => {
   const parts = token.split('.');
   if (parts.length !== 3) {
@@ -60,12 +73,17 @@ const verifyClerkToken = async (token) => {
   }
 
   const fullName = payload.name || [payload.first_name, payload.last_name].filter(Boolean).join(' ').trim();
+  const metadataRole = payload?.public_metadata?.role || payload?.metadata?.role || payload?.unsafe_metadata?.role;
+  const resolvedRole = metadataRole === 'admin' || metadataRole === 'doctor' || metadataRole === 'patient'
+    ? metadataRole
+    : undefined;
 
   return {
     id: payload.sub,
     email: payload.email || payload.email_address || '',
     name: fullName,
     phone: payload.phone_number || '',
+    role: resolvedRole,
     authType: 'clerk'
   };
 };
@@ -82,10 +100,11 @@ const authMiddleware = async (req, res, next) => {
         if (decoded) {
           // Provide a structure that resolveCurrentPatient can use
           req.user = { 
-            id: 'admin', 
-            email: process.env.ADMIN_EMAIL || 'admin@medisync.com', 
+            id: decoded?.id || decoded?._id || 'legacy-admin-token', 
+            email: getPrimaryAdminEmail(), 
             role: 'admin', 
-            authType: 'admin' 
+            authType: 'admin',
+            forceAdmin: true
           };
           return next();
         }

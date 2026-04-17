@@ -27,6 +27,11 @@ const AddDoctor = () => {
         return toast.error('Image Not Selected');
       }
 
+      const normalizedPassword = String(password || '').trim();
+      if (normalizedPassword.length < 8) {
+        return toast.error('Password must be at least 8 characters.');
+      }
+
       const formData = new FormData();
       formData.append('image', docImg);
       formData.append('name', name);
@@ -63,7 +68,12 @@ const AddDoctor = () => {
       }
 
     } catch (error) {
-      toast.error(error.response?.data?.message || error.message);
+      const serverMessage = error.response?.data?.message || error.message;
+      if (/data breach|compromised|another password/i.test(String(serverMessage))) {
+        toast.error('This password is unsafe or reused. Please use a new unique strong password.');
+      } else {
+        toast.error(serverMessage);
+      }
       console.log(error);
     }
   };
@@ -148,7 +158,7 @@ const AddDoctor = () => {
               onChange={(e) => setPassword(e.target.value)} 
               value={password} 
               type="password" 
-              placeholder="Password" 
+              placeholder="Strong password (e.g. Doc@2026Safe!)" 
               required 
             />
           </div>
