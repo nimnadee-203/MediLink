@@ -197,6 +197,169 @@ export const createDoctorPrescription = async (req, res) => {
   }
 };
 
+export const getDoctorCompletedAppointments = async (req, res) => {
+  try {
+    const doctorId = req.doctorId;
+    const { dtoken } = req.headers;
+
+    const appointmentsRes = await axios
+      .get(`${APPOINTMENT_SERVICE_URL}/api/appointments?doctorId=${doctorId}&status=completed`, {
+        headers: { dtoken }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch completed appointments:", err.message);
+        return { data: { appointments: [] } };
+      });
+
+    const appointments = appointmentsRes.data?.appointments || [];
+    const sorted = [...appointments].sort((a, b) => {
+      const ta = new Date(`${a.slotDate}T${a.slotTime || "00:00"}:00`).getTime();
+      const tb = new Date(`${b.slotDate}T${b.slotTime || "00:00"}:00`).getTime();
+      return tb - ta;
+    });
+
+    const uniquePatientIds = [...new Set(sorted.map((a) => String(a.patientId)))];
+    const nameEntries = await Promise.all(
+      uniquePatientIds.map(async (pid) => {
+        const patientRes = await axios.get(`${PATIENT_SERVICE_URL}/api/patients/${pid}`).catch(() => ({ data: null }));
+        return [pid, patientRes.data?.name || "Patient"];
+      })
+    );
+    const patientNameMap = Object.fromEntries(nameEntries);
+
+    return res.json({
+      success: true,
+      completedAppointments: sorted.map((appointment) => ({
+        _id: String(appointment.id || appointment._id),
+        patientId: String(appointment.patientId),
+        patientName: patientNameMap[String(appointment.patientId)] || "Patient",
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
+        reason: appointment.reason || "",
+        visitMode: appointment.visitMode === "telemedicine" ? "telemedicine" : "in_person",
+        status: appointment.status,
+        paymentStatus: appointment.paymentStatus,
+        amount: appointment.amount
+      }))
+    });
+  } catch (error) {
+    console.log(error);
+    return res.json({ success: false, message: error.message });
+  }
+};
+
+export const listPrescriptionsForAppointment = async (req, res) => {
+  try {
+    const { appointmentId } = req.query;
+    const { dtoken } = req.headers;
+    const doctorId = req.doctorId;
+
+    if (!appointmentId || !isValidObjectId(appointmentId)) {
+      return res.json({ success: false, message: "Valid appointmentId is required" });
+    }
+
+    const appointmentRes = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+      headers: { dtoken }
+    });
+
+    if (!appointmentRes.data?.appointment) {
+      return res.json({ success: false, message: "Appointment not found" });
+    }
+
+    const appointment = appointmentRes.data.appointment;
+    if (String(appointment.doctorId) !== String(doctorId)) {
+      return res.json({ success: false, message: "Not authorized for this appointment" });
+    }
+
+    const items = await prescriptionModel
+      .find({ doctorId, appointmentId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json({
+      success: true,
+      prescriptions: items.map((p) => ({
+        _id: String(p._id),
+        appointmentId: String(p.appointmentId),
+        patientId: String(p.patientId),
+        medications: p.medications || [],
+        generalInstructions: p.generalInstructions || "",
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.log(error);
+    return res.json({ success: false, message: error.response?.data?.message || error.message });
+  }
+};
+
+export const listPrescriptionsForPatient = async (req, res) => {
+  try {
+    const { patientId } = req.query;
+
+    if (!patientId || !isValidObjectId(patientId)) {
+      return res.json({ success: false, message: "Valid patientId is required" });
+    }
+
+    const items = await prescriptionModel
+      .find({ patientId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (items.length === 0) {
+      return res.json({ success: true, prescriptions: [] });
+    }
+
+    const doctorIds = [...new Set(items.map((p) => String(p.doctorId)))];
+    const doctors = await doctorModel
+      .find({ _id: { $in: doctorIds } })
+      .select("name speciality")
+      .lean();
+    const doctorMap = Object.fromEntries(
+      doctors.map((doc) => [String(doc._id), { name: doc.name || "Doctor", speciality: doc.speciality || "" }])
+    );
+
+    const appointmentIds = [...new Set(items.map((p) => String(p.appointmentId)))];
+    const appointmentDetails = {};
+
+    await Promise.all(
+      appointmentIds.map(async (id) => {
+        const response = await axios
+          .get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${id}`)
+          .catch(() => null);
+        if (response?.data?.appointment) {
+          appointmentDetails[id] = response.data.appointment;
+        }
+      })
+    );
+
+    const prescriptions = items.map((p) => {
+      const doctorInfo = doctorMap[String(p.doctorId)] || { name: "Doctor", speciality: "" };
+      const appt = appointmentDetails[String(p.appointmentId)] || {};
+
+      return {
+        _id: String(p._id),
+        doctorId: String(p.doctorId),
+        doctorName: doctorInfo.name,
+        doctorSpeciality: doctorInfo.speciality,
+        appointmentId: String(p.appointmentId),
+        slotDate: appt.slotDate || null,
+        slotTime: appt.slotTime || null,
+        visitMode: appt.visitMode || null,
+        reason: appt.reason || "",
+        medications: p.medications || [],
+        generalInstructions: p.generalInstructions || ""
+      };
+    });
+
+    return res.json({ success: true, prescriptions });
+  } catch (error) {
+    console.log(error);
+    return res.json({ success: false, message: error.message });
+  }
+};
+
 /* ===================== EXTRA ===================== */
 
 export const getDoctorEmail = async (req, res) => {
