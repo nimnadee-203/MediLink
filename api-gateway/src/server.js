@@ -11,7 +11,23 @@ const port = process.env.PORT || 8000;
 const patientServiceTarget = process.env.PATIENT_SERVICE_URL || 'http://localhost:8002';
 const appointmentServiceTarget = process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:8004';
 const doctorServiceTarget = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
+const telemedicineServiceTarget = process.env.TELEMEDICINE_SERVICE_URL || 'http://localhost:8007';
+const symptomCheckerServiceTarget = process.env.SYMPTOM_CHECKER_SERVICE_URL || 'http://localhost:8010';
+const paymentServiceTarget = process.env.PAYMENT_SERVICE_URL || 'http://localhost:8019';
 const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+
+/** Express may strip the mount path before HPM runs pathRewrite; normalize to target /checker prefix. */
+const rewriteGatewayCheckerPath = (path) => {
+  const pathname = String(path || '').split('?')[0] || '/';
+  const clean = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  if (clean.startsWith('/api/checker')) {
+    return clean.replace(/^\/api\/checker/, '/checker');
+  }
+  if (clean.startsWith('/checker')) {
+    return clean;
+  }
+  return `/checker${clean}`;
+};
 
 let verifyTokenLoader;
 let warnedMissingClerkKey = false;
@@ -121,6 +137,58 @@ app.use(
 app.use('/api/doctor', createServiceProxy(doctorServiceTarget));
 
 app.use('/api/admin', createServiceProxy(doctorServiceTarget));
+
+app.use(
+  '/api/telemedicine',
+  withAuthContext,
+  createServiceProxy(telemedicineServiceTarget)
+);
+
+app.use(
+  '/api/checker',
+  withAuthContext,
+  createProxyMiddleware({
+    target: symptomCheckerServiceTarget,
+    changeOrigin: true,
+    pathRewrite: rewriteGatewayCheckerPath,
+    onProxyReq: (proxyReq, req) => {
+      const forwardedHeaders = [
+        'authorization',
+        'dtoken',
+        'atoken',
+        'x-auth-user-id',
+        'x-clerk-email',
+        'x-clerk-name',
+        'x-clerk-phone'
+      ];
+      for (const header of forwardedHeaders) {
+        const value = req.headers[header];
+        if (value) {
+          proxyReq.setHeader(header, value);
+        }
+      }
+    }
+  })
+);
+
+app.use(
+  '/api/payments',
+  createProxyMiddleware({
+    target: paymentServiceTarget,
+    changeOrigin: true,
+    pathRewrite: (path) => {
+      const pathname = String(path || '').split('?')[0] || '/';
+      const clean = pathname.startsWith('/') ? pathname : `/${pathname}`;
+      if (clean.startsWith('/api/payments')) {
+        return clean.replace(/^\/api\/payments/, '/payments');
+      }
+      if (clean.startsWith('/payments')) {
+        return clean;
+      }
+      return `/payments${clean}`;
+    }
+  })
+);
 
 app.use(
   '/patient-uploads',

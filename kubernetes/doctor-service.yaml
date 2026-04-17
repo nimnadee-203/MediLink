@@ -86,6 +86,11 @@ spec:
             configMapKeyRef:
               name: medisync-config
               key: APPOINTMENT_DB_NAME
+        - name: DOCTOR_DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: DOCTOR_DB_NAME
         - name: PATIENT_DB_NAME
           valueFrom:
             configMapKeyRef:

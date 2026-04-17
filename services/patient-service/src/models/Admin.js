@@ -13,14 +13,14 @@ const reportSchema = new mongoose.Schema(
   { _id: true }
 );
 
-const patientSchema = new mongoose.Schema(
+const adminSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, minlength: 6 },
     clerkUserId: { type: String, unique: true, sparse: true },
-    role: { type: String, enum: ['patient', 'doctor', 'admin'], default: 'patient' },
+    role: { type: String, enum: ['admin'], default: 'admin' },
     phone: { type: String, trim: true },
     age: { type: Number },
     gender: { type: String, enum: ['male', 'female', 'other'] },
@@ -31,9 +31,9 @@ const patientSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const patientDb = mongoose.connection.useDb(process.env.PATIENT_DB_NAME || 'patients', { useCache: true });
-const patientCollectionName = process.env.PATIENT_COLLECTION_NAME || 'patients';
+const adminDb = mongoose.connection.useDb(process.env.ADMIN_DB_NAME || 'admin_1', { useCache: true });
+const adminCollectionName = process.env.ADMIN_COLLECTION_NAME || 'admin';
 
-const Patient = patientDb.models.Patient || patientDb.model('Patient', patientSchema, patientCollectionName);
+const Admin = adminDb.models.Admin || adminDb.model('Admin', adminSchema, adminCollectionName);
 
-export default Patient;
+export default Admin;

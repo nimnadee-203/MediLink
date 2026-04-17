@@ -1,0 +1,156 @@
+# MediSync Environment Variables by Service
+# Copy relevant blocks into each service's `.env` file.
+# Replace placeholder values before deployment.
+
+==================================================
+SERVICE: api-gateway
+TOPICS: server-port, downstream-services, auth
+==================================================
+PORT=8000
+PATIENT_SERVICE_URL=http://localhost:8002
+APPOINTMENT_SERVICE_URL=http://localhost:8004
+DOCTOR_SERVICE_URL=http://localhost:4000
+CLERK_SECRET_KEY=sk_test_replace_with_clerk_secret_key
+
+
+==================================================
+SERVICE: admin (Vite frontend)
+TOPICS: clerk-client, gateway-routing, doctor-admin-fallback
+==================================================
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_replace_with_clerk_publishable_key
+VITE_BACKEND_URL=http://localhost:8000
+VITE_API_GATEWAY_URL=http://localhost:8000
+VITE_DOCTOR_API_BASE_URL=http://localhost:8000/api/doctor
+VITE_DOCTOR_ADMIN_EMAIL=admin@medisync.com
+VITE_DOCTOR_ADMIN_PASSWORD=Admin32
+
+
+==================================================
+SERVICE: client (Vite frontend)
+TOPICS: clerk-client, patient-api
+==================================================
+VITE_API_BASE_URL=http://localhost:8000/api/patients
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_replace_with_clerk_publishable_key
+
+
+==================================================
+SERVICE: auth-service
+TOPICS: server-port, database, jwt
+==================================================
+PORT=8001
+MONGO_URI=mongodb://localhost:27017/medisync
+JWT_SECRET=replace_with_strong_secret
+
+
+==================================================
+SERVICE: patient-service
+TOPICS: server-port, database-splitting, collections, admin-bootstrap, clerk
+==================================================
+PORT=8002
+MONGO_URI=mongodb://localhost:27017/medisync
+PATIENT_DB_NAME=patients
+ADMIN_DB_NAME=admin_1
+REPORT_DB_NAME=Reports
+PATIENT_COLLECTION_NAME=patients
+ADMIN_COLLECTION_NAME=admin
+REPORT_COLLECTION_NAME=reports
+ADMIN_EMAILS=admin@medisync.ai,it23589254@my.sliit.lk
+CLERK_SECRET_KEY=sk_test_replace_with_clerk_secret_key
+
+# Optional migration/legacy topics
+LEGACY_USERS_COLLECTION_NAMES=users,patients
+LEGACY_SOURCE_DB_NAMES=test,medilink,test-patient,test-patiend
+LEGACY_TEST_DB_NAMES=test,test-patient,test-patiend
+
+
+==================================================
+SERVICE: appointment-service
+TOPICS: server-port, database, startup-behavior
+==================================================
+PORT=8004
+MONGO_URI=mongodb://localhost:27017
+APPOINTMENT_DB_NAME=appointment-db
+REQUIRE_DB=false
+
+
+==================================================
+SERVICE: doctor-service
+TOPICS: server-port, database-domains, auth-admin, jwt, clerk, cloudinary, service-links, notifications
+==================================================
+PORT=4000
+MONGODB_URL=mongodb://localhost:27017/medisync
+DOCTOR_DB_NAME=doctors
+PATIENT_DB_NAME=patients
+APPOINTMENT_DB_NAME=appointments
+
+ADMIN_EMAIL=admin@medisync.com
+ADMIN_PASSWORD=Admin32
+JWT_SECRET=replace_with_strong_secret
+CLERK_SECRET_KEY=sk_test_replace_with_clerk_secret_key
+
+CLOUDINARY_NAME=replace_with_cloudinary_name
+CLOUDINARY_API_KEY=replace_with_cloudinary_api_key
+CLOUDINARY_SECRET_KEY=replace_with_cloudinary_secret
+
+APPOINTMENT_SERVICE_URL=http://localhost:8004
+PATIENT_SERVICE_URL=http://localhost:8002
+NOTIFICATION_SERVICE_URL=http://localhost:8006
+NOTIFICATION_INTERNAL_SECRET=replace_with_shared_internal_secret
+
+
+==================================================
+SERVICE: notification-service
+TOPICS: server-port, database, inter-service-auth, email-provider, smtp
+==================================================
+PORT=8006
+MONGO_URI=mongodb://localhost:27017/
+NOTIFICATION_DB_NAME=notification-db
+NOTIFICATION_SERVICE_URL=http://127.0.0.1:8006
+NOTIFICATION_INTERNAL_SECRET=replace_with_a_long_random_shared_secret
+
+EMAIL_PROVIDER=gmail
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASSWORD=your-app-specific-password
+EMAIL_FROM=noreply@medilink.com
+
+# If EMAIL_PROVIDER=custom
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+
+
+==================================================
+SERVICE: payment-service
+TOPICS: server-port, database, stripe
+==================================================
+PORT=8019
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=payments
+STRIPE_SECRET_KEY=sk_test_replace_with_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=whsec_replace_with_webhook_secret
+
+
+==================================================
+SERVICE: symptom-checker-service
+TOPICS: server-port, database
+==================================================
+PORT=8010
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB_NAME=symptom-checker
+
+
+==================================================
+SERVICE: telemedicine-service
+TOPICS: server-port, database
+==================================================
+PORT=8007
+MONGODB_URL=mongodb://localhost:27017/medisync
+
+
+==================================================
+CROSS-SERVICE SHARED TOPICS (recommended)
+==================================================
+# Keep these consistent across services that use them:
+CLERK_SECRET_KEY=sk_test_replace_with_clerk_secret_key
+NOTIFICATION_INTERNAL_SECRET=replace_with_shared_internal_secret
+JWT_SECRET=replace_with_strong_secret

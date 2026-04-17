@@ -4,13 +4,13 @@ import { assets } from '../assets/assets';
 import { Users, Stethoscope, ClipboardList, TrendingUp, Calendar, X, ArrowRight } from 'lucide-react';
 
 const Dashboard = () => {
-  const { aToken, getDashData, dashData, cancelAppointment, adminEmail } = useContext(AdminContext);
+  const { getDashData, dashData, cancelAppointment, adminEmail, isAdminUser, profileLoaded } = useContext(AdminContext);
 
   useEffect(() => {
-    if (aToken) {
+    if (profileLoaded && isAdminUser) {
       getDashData();
     }
-  }, [aToken]);
+  }, [profileLoaded, isAdminUser, getDashData]);
 
   const stats = [
     { label: 'Total Patients', value: dashData ? dashData.patients : '0', icon: Users, color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.1)' },

@@ -12,7 +12,7 @@ data:
   NOTIFICATION_SERVICE_URL: "http://notification-service:8006"
   AUTH_SERVICE_URL: "http://auth-service:8008"
   PAYMENT_SERVICE_URL: "http://payment-service:8019"
-  SYMPTOM_CHECKER_SERVICE_URL: "http://symptom-checker-service:8007"
+  SYMPTOM_CHECKER_SERVICE_URL: "http://symptom-checker-service:8010"
   TELEMEDICINE_SERVICE_URL: "http://telemedicine-service:8007"
 
   # --- Common Ports ---
@@ -23,12 +23,14 @@ data:
   PORT_AUTH: "8008"
   PORT_PAYMENT: "8019"
   PORT_GATEWAY: "8000"
-  PORT_SYMPTOM: "8007"
+  PORT_SYMPTOM: "8010"
   PORT_TELEMEDICINE: "8007"
 
   # --- Database Names (Used by some legacy lookups) ---
   APPOINTMENT_DB_NAME: "appointments"
+  DOCTOR_DB_NAME: "doctors"
   PATIENT_DB_NAME: "patients"
+  ADMIN_DB_NAME: "admin"
   NOTIFICATION_DB_NAME: "notification-db"
 
   # --- Email Provider Config ---

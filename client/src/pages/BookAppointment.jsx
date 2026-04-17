@@ -294,7 +294,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
         saveAppointmentVisitMode(createdAppointmentId, visitMode);
       }
 
-      setMessage({ type: 'success', text: 'Your appointment is confirmed. Redirecting to payment…' });
+      setMessage({ type: 'success', text: 'Slot reserved. Complete payment to confirm your appointment.' });
       setTimeout(
         () =>
           navigate('/payment', {
@@ -334,7 +334,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
             Schedule a visit
           </h1>
           <p className="text-slate-600 mt-2 text-sm sm:text-base max-w-xl leading-relaxed">
-            Choose a convenient slot. You will receive a confirmation in your appointments list. Consultation fees are shown before you confirm.
+            Choose a convenient slot and continue to payment. Your appointment is confirmed only after payment succeeds.
           </p>
         </div>
         <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 sm:shrink-0">
@@ -764,7 +764,7 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               {loading ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Confirming…
+                  Continuing…
                 </>
               ) : !profileReady ? (
                 <>
@@ -774,12 +774,12 @@ export default function BookAppointment({ patient, profileReady = true, onRetryP
               ) : !patientRecordId ? (
                 <>
                   <AlertCircle size={20} />
-                  Profile required to confirm
+                  Profile required to continue
                 </>
               ) : (
                 <>
                   <CheckCircle size={20} />
-                  Confirm appointment — Rs. {doctorFees.toLocaleString()}
+                  Continue to payment — Rs. {doctorFees.toLocaleString()}
                 </>
               )}
             </Button>

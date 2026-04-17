@@ -3,13 +3,13 @@ import { AdminContext } from '../context/AdminContext';
 import { assets } from '../assets/assets';
 
 const Appointments = () => {
-  const { aToken, appointments, getAllAppointments, cancelAppointment } = useContext(AdminContext);
+  const { appointments, getAllAppointments, cancelAppointment, isAdminUser, profileLoaded } = useContext(AdminContext);
 
   useEffect(() => {
-    if (aToken) {
+    if (profileLoaded && isAdminUser) {
       getAllAppointments();
     }
-  }, [aToken]);
+  }, [profileLoaded, isAdminUser, getAllAppointments]);
 
   return (
     <div className="appointments-page">

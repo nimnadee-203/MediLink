@@ -2,12 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { Elements, CardNumberElement, CardExpiryElement, CardCvcElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
+import { appointmentRequest } from '../lib/api';
 import '../styles/payment-notification-ai.css';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
-const paymentApiBaseUrl = import.meta.env.VITE_PAYMENT_API_BASE_URL || 'http://localhost:8019';
 
-function CheckoutForm({ initialForm }) {
+/** Payment service is exposed via API gateway at /api/payments → payment-service /payments */
+const gatewayOrigin = import.meta.env.VITE_API_GATEWAY_URL || 'http://localhost:8000';
+const paymentApiBaseUrl =
+  import.meta.env.VITE_PAYMENT_API_BASE_URL || `${gatewayOrigin}/api`;
+
+function CheckoutForm({ initialForm, getToken }) {
   const stripe = useStripe();
   const elements = useElements();
   const navigate = useNavigate();
@@ -16,6 +22,7 @@ function CheckoutForm({ initialForm }) {
 
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const amountLabel = useMemo(() => {
     if (!form.amount) {
@@ -75,12 +82,25 @@ function CheckoutForm({ initialForm }) {
       }
 
       if (result.paymentIntent?.status === 'succeeded') {
+        const appointmentId = form.appointmentId || '';
+
+        if (appointmentId && !/^PAY-/i.test(String(appointmentId))) {
+          await appointmentRequest(`/${appointmentId}`, getToken, {
+            method: 'PATCH',
+            body: {
+              status: 'confirmed',
+              paymentStatus: 'paid'
+            }
+          });
+        }
+
         setStatus('success');
         setMessage('Payment succeeded! Redirecting...');
         setTimeout(() => {
           navigate('/payment-success', { 
             state: { 
               paymentId: form.paymentId,
+              appointmentId: form.appointmentId,
               amount: form.amount,
               patientId: form.patientId,
               doctorId: form.doctorId,
@@ -95,7 +115,48 @@ function CheckoutForm({ initialForm }) {
       setMessage('Payment completed with an unexpected status.');
     } catch (error) {
       setStatus('error');
-      setMessage(error.message || 'An error occurred during payment processing');
+      const msg = error?.message || 'An error occurred during payment processing';
+      const hint =
+        msg === 'Failed to fetch' || msg === 'NetworkError when attempting to fetch resource.'
+          ? ' Check that the API gateway (port 8000) and payment service (port 8019) are running, or set VITE_PAYMENT_API_BASE_URL in client/.env.'
+          : '';
+      setMessage(`${msg}${hint}`);
+    }
+  };
+
+  const handleCancelBooking = async () => {
+    if (!window.confirm('Cancel this appointment?')) {
+      return;
+    }
+
+    const appointmentId = form.appointmentId || form.paymentId;
+
+    if (!appointmentId || /^PAY-/i.test(String(appointmentId))) {
+      setMessage('No appointment ID found to cancel. Opening your appointments page.');
+      navigate('/my-appointments');
+      return;
+    }
+
+    try {
+      setIsCancelling(true);
+      setStatus('processing');
+      setMessage('Cancelling appointment...');
+
+      await appointmentRequest(`/${appointmentId}/cancel`, getToken, {
+        method: 'PATCH',
+        body: { cancelledBy: 'patient' }
+      });
+
+      setStatus('success');
+      setMessage('Appointment cancelled. Redirecting...');
+      setTimeout(() => {
+        navigate('/my-appointments');
+      }, 800);
+    } catch (error) {
+      setStatus('error');
+      setMessage(error.message || 'Failed to cancel appointment');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -150,12 +211,12 @@ function CheckoutForm({ initialForm }) {
 
           {/* Card Type Selection */}
           <div className="form-field">
-            <label htmlFor="cardType">Credit card</label>
             <select 
               id="cardType"
               name="cardType"
               value={form.cardType}
               onChange={handleChange}
+              aria-label="Card type"
               className="select-field"
             >
               <option value="credit">Credit Card</option>
@@ -333,7 +394,12 @@ function CheckoutForm({ initialForm }) {
 
           {/* Secondary Buttons */}
           <div className="button-group">
-            <button type="button" className="btn-cancel">
+            <button
+              type="button"
+              className="btn-cancel"
+              onClick={handleCancelBooking}
+              disabled={status === 'processing' || isCancelling}
+            >
               Cancel Booking
             </button>
           </div>
@@ -419,6 +485,7 @@ function CheckoutForm({ initialForm }) {
 
 function PaymentPage() {
   const location = useLocation();
+  const { getToken } = useAuth();
   const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
   const routeState = location.state || {};
 
@@ -427,6 +494,7 @@ function PaymentPage() {
       firstName: '',
       lastName: '',
       paymentId: routeState.appointmentId || `PAY-${Date.now()}`,
+      appointmentId: routeState.appointmentId || '',
       patientId: routeState.patientId || '',
       doctorId: routeState.doctorId || '',
       appointmentDate: routeState.appointmentDate || '',
@@ -452,7 +520,7 @@ function PaymentPage() {
   return (
     <main className="payment-page-shell">
       <Elements stripe={stripePromise}>
-        <CheckoutForm initialForm={initialForm} />
+        <CheckoutForm initialForm={initialForm} getToken={getToken} />
       </Elements>
     </main>
   );

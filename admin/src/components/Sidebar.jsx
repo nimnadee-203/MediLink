@@ -33,6 +33,18 @@ const Sidebar = () => {
         >
           Doctor List
         </NavLink>
+        <NavLink 
+          to="/users" 
+          className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}
+        >
+          User Management
+        </NavLink>
+        <NavLink 
+          to="/profile" 
+          className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}
+        >
+          Admin Profile
+        </NavLink>
       </nav>
     </div>
   );

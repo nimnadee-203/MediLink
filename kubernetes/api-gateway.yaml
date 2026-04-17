@@ -41,6 +41,21 @@ spec:
             configMapKeyRef:
               name: medisync-config
               key: DOCTOR_SERVICE_URL
+        - name: TELEMEDICINE_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: TELEMEDICINE_SERVICE_URL
+        - name: SYMPTOM_CHECKER_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: SYMPTOM_CHECKER_SERVICE_URL
+        - name: PAYMENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: medisync-config
+              key: PAYMENT_SERVICE_URL
         - name: CLERK_SECRET_KEY
           valueFrom:
             secretKeyRef:

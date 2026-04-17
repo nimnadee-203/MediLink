@@ -19,7 +19,7 @@ spec:
         image: medisync-symptom-checker-service:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8007
+        - containerPort: 8010
         env:
         - name: PORT
           valueFrom:
@@ -41,6 +41,6 @@ spec:
     app: symptom-checker-service
   ports:
   - protocol: TCP
-    port: 8007
-    targetPort: 8007
+    port: 8010
+    targetPort: 8010
   type: ClusterIP
