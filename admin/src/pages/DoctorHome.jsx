@@ -393,9 +393,9 @@ const DoctorHome = () => {
             <div>
               <h3>
                 {doctor?.name ? formatDoctorDisplayName(doctor.name) : 'Welcome Doctor'}{' '}
-                <span className="doctor-hello-wave">👋</span>
+                <span className="doctor-hello-wave">≡ƒæï</span>
               </h3>
-              <p>{doctor?.speciality || 'Clinical workspace'} · Ready for today’s consultations</p>
+              <p>{doctor?.speciality || 'Clinical workspace'} ┬╖ Ready for todayΓÇÖs consultations</p>
               <small>{upcomingSummary}</small>
             </div>
             <div className="doctor-home-actions">
@@ -489,7 +489,7 @@ const DoctorHome = () => {
                     <li key={apt._id} className="doctor-home-appointment-item clickable" onClick={() => viewAppointmentDetails(apt._id)}>
                       <div>
                         <strong>{formatTime12h(apt.slotTime)}</strong>
-                        <span>{formatDate(apt.slotDate)} · Rs. {Number(apt.amount || 0).toLocaleString()}</span>
+                        <span>{formatDate(apt.slotDate)} ┬╖ Rs. {Number(apt.amount || 0).toLocaleString()}</span>
                       </div>
                       <div>
                         <span className={`visit-mode-chip ${apt.visitMode === 'telemedicine' ? 'telemedicine' : 'inperson'}`}>
@@ -535,6 +535,17 @@ const DoctorHome = () => {
                           </button>
                           <button
                             type="button"
+                            className="row-action-btn approve"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              runAppointmentAction(apt._id, 'complete');
+                            }}
+                            disabled={actionLoadingId === `${apt._id}complete` || apt.status !== 'confirmed'}
+                          >
+                            {actionLoadingId === `${apt._id}complete` ? 'Completing...' : 'Mark Completed'}
+                          </button>
+                          <button
+                            type="button"
                             className="row-action-btn cancel"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -575,7 +586,7 @@ const DoctorHome = () => {
                 <p>Review details and manage appointment status.</p>
               </div>
               <button type="button" className="appointment-modal-close" onClick={() => setSelectedAppointment(null)}>
-                ×
+                ├ù
               </button>
             </div>
             {actionError && <p className="error-text">{actionError}</p>}
@@ -601,7 +612,7 @@ const DoctorHome = () => {
                         <div>
                           <p>{report.title || report.fileName || 'Report'}</p>
                           <small>
-                            {report.fileName || 'file'} · {formatBytes(report.size)}
+                            {report.fileName || 'file'} ┬╖ {formatBytes(report.size)}
                           </small>
                         </div>
                         {report.fileName ? (
@@ -633,6 +644,14 @@ const DoctorHome = () => {
                 </button>
                 <button
                   type="button"
+                  className="row-action-btn approve"
+                  onClick={() => runAppointmentAction(selectedAppointment._id, 'complete')}
+                  disabled={actionLoadingId === `${selectedAppointment._id}complete` || selectedAppointment.status !== 'confirmed'}
+                >
+                  {actionLoadingId === `${selectedAppointment._id}complete` ? 'Completing...' : 'Mark Completed'}
+                </button>
+                <button
+                  type="button"
                   className="row-action-btn cancel"
                   onClick={() => runAppointmentAction(selectedAppointment._id, 'cancel')}
                   disabled={actionLoadingId === `${selectedAppointment._id}cancel` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
@@ -649,3 +668,4 @@ const DoctorHome = () => {
 };
 
 export default DoctorHome;
+

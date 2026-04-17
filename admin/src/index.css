@@ -1459,6 +1459,170 @@ h2 {
   cursor: not-allowed;
 }
 
+.doctor-prescriptions-section {
+  margin-top: 18px;
+}
+
+.doctor-prescriptions-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 16px;
+  margin-top: 14px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .doctor-prescriptions-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.doctor-prescription-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  max-height: 520px;
+  overflow: auto;
+}
+
+.doctor-prescription-panel h4 {
+  margin: 0 0 10px 0;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.doctor-prescription-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.doctor-prescription-item:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08);
+}
+
+.doctor-prescription-item.selected {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px #6366f1 inset;
+}
+
+.doctor-prescription-form .doctor-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.doctor-prescription-form label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.doctor-prescription-form input,
+.doctor-prescription-form textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.doctor-prescription-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.doctor-medication-card {
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+
+.doctor-medication-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.doctor-medication-card-head span {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.doctor-medication-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+@media (max-width: 600px) {
+  .doctor-medication-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.doctor-prescription-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.doctor-prescription-actions .login-btn,
+.doctor-prescription-actions .cancel-btn {
+  margin: 0;
+}
+
+.doctor-existing-rx {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.doctor-existing-rx h5 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.doctor-existing-rx ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.doctor-existing-rx li {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.doctor-existing-rx li strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #0f172a;
+}
+
 .doctor-live-session {
   margin-top: 18px;
 }

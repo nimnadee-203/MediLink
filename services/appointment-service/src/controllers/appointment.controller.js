@@ -158,45 +158,7 @@ export const createAppointment = async (req, res) => {
       visitMode: payload.visitMode === "telemedicine" ? "telemedicine" : "in_person",
       reportIds
     });
-
-    // Send notifications to both patient and doctor
     const appointmentDetails = sanitizeAppointment(appointment);
-
-    // Notify patient
-    await sendNotificationToUser({
-      recipientId: appointment.patientId,
-      recipientRole: "patient",
-      type: "appointment_booked",
-      title: "Appointment Confirmed",
-      body: `Your appointment is confirmed for ${appointment.slotDate} at ${appointment.slotTime}.`,
-      appointmentId: appointment._id,
-      appointmentDetails: {
-        patientId: appointment.patientId,
-        doctorId: appointment.doctorId,
-        slotDate: appointment.slotDate,
-        slotTime: appointment.slotTime,
-        visitMode: appointment.visitMode,
-        reason: appointment.reason
-      }
-    });
-
-    // Notify doctor
-    await sendNotificationToUser({
-      recipientId: appointment.doctorId,
-      recipientRole: "doctor",
-      type: "appointment_booked",
-      title: "New Appointment Scheduled",
-      body: `A new appointment has been scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
-      appointmentId: appointment._id,
-      appointmentDetails: {
-        patientId: appointment.patientId,
-        doctorId: appointment.doctorId,
-        slotDate: appointment.slotDate,
-        slotTime: appointment.slotTime,
-        visitMode: appointment.visitMode,
-        reason: appointment.reason
-      }
-    });
 
     return res.status(201).json({
       message: "Appointment booked successfully",
@@ -350,6 +312,11 @@ export const updateAppointment = async (req, res) => {
       return res.status(400).json({ message: "No valid fields provided for update" });
     }
 
+    // Promote appointment to confirmed when payment becomes paid unless an explicit status is provided.
+    if (updates.paymentStatus === "paid" && updates.status === undefined && appointment.status === "pending") {
+      updates.status = "confirmed";
+    }
+
     if (updates.amount !== undefined && (typeof updates.amount !== "number" || Number.isNaN(updates.amount) || updates.amount < 0)) {
       return res.status(400).json({ message: "amount must be a valid non-negative number" });
     }
@@ -383,6 +350,7 @@ export const updateAppointment = async (req, res) => {
     const nextSlotDate = updates.slotDate || appointment.slotDate;
     const nextSlotTime = updates.slotTime || appointment.slotTime;
     const nextStatus = updates.status || appointment.status;
+    const previousPaymentStatus = appointment.paymentStatus;
 
     if (nextStatus !== "cancelled") {
       const conflictMessage = await ensureSlotAvailable({
@@ -436,6 +404,46 @@ export const updateAppointment = async (req, res) => {
     }
 
     await appointment.save();
+
+    const becamePaid = previousPaymentStatus !== "paid" && appointment.paymentStatus === "paid";
+
+    if (becamePaid) {
+      await sendNotificationToUser({
+        recipientId: appointment.patientId,
+        recipientRole: "patient",
+        type: "appointment_booked",
+        title: "Appointment Confirmed",
+        body: `Your appointment is confirmed for ${appointment.slotDate} at ${appointment.slotTime}.`,
+        appointmentId: appointment._id,
+        appointmentDetails: {
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          paymentStatus: appointment.paymentStatus,
+          visitMode: appointment.visitMode,
+          reason: appointment.reason
+        }
+      });
+
+      await sendNotificationToUser({
+        recipientId: appointment.doctorId,
+        recipientRole: "doctor",
+        type: "appointment_booked",
+        title: "New Appointment Scheduled",
+        body: `A new appointment has been scheduled for ${appointment.slotDate} at ${appointment.slotTime}.`,
+        appointmentId: appointment._id,
+        appointmentDetails: {
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          paymentStatus: appointment.paymentStatus,
+          visitMode: appointment.visitMode,
+          reason: appointment.reason
+        }
+      });
+    }
 
     return res.json({
       message: "Appointment updated successfully",

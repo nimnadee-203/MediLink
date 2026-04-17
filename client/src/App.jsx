@@ -209,6 +209,9 @@ function AppContent() {
   const [isRoleResolved, setIsRoleResolved] = useState(false);
   const [message, setMessage] = useState('');
   const [reports, setReports] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+  const [prescriptionsError, setPrescriptionsError] = useState('');
   const [currentRole, setCurrentRole] = useState('patient');
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminSection, setAdminSection] = useState('overview');
@@ -355,6 +358,20 @@ function AppContent() {
     }
   };
 
+  const fetchPrescriptions = async () => {
+    try {
+      setPrescriptionsLoading(true);
+      setPrescriptionsError('');
+      const data = await request('/prescriptions');
+      setPrescriptions(data.prescriptions || []);
+    } catch (err) {
+      setPrescriptions([]);
+      setPrescriptionsError(err.message || 'Failed to load prescriptions');
+    } finally {
+      setPrescriptionsLoading(false);
+    }
+  };
+
   const fetchAdminUsers = async () => {
     try {
       const data = await request('/admin/users');
@@ -368,6 +385,9 @@ function AppContent() {
     if (!isSignedIn) {
       setPatient(null);
       setReports([]);
+      setPrescriptions([]);
+      setPrescriptionsError('');
+      setPrescriptionsLoading(false);
       setCurrentRole('patient');
       setIsRoleResolved(false);
       setAdminUsers([]);
@@ -386,6 +406,7 @@ function AppContent() {
       path === '/profile' ||
       path === '/doctors' ||
       path === '/appointments' ||
+      path === '/prescriptions' ||
       path.startsWith('/book/');
     if (shouldLoadProtectedData) {
       setIsRoleResolved(false);
@@ -395,8 +416,10 @@ function AppContent() {
 
         if (resolvedRole === 'patient') {
           await fetchReports();
+          await fetchPrescriptions();
         } else {
           setReports([]);
+          setPrescriptions([]);
         }
       };
       loadProtectedData();
@@ -1348,15 +1371,6 @@ function AppContent() {
                             <Calendar size={18} className={patientSection === 'appointments' ? 'text-indigo-600' : 'text-slate-400'} /> Book Appointments
                           </button>
                         )}
-                        {hasPrivilege('video_consultations') && (
-                          <button
-                            type="button"
-                            className={cn('w-full text-left px-4 py-3 rounded-xl font-medium flex items-center gap-3 transition-colors outline-none', patientSection === 'consultations' ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'text-slate-600 hover:bg-slate-50 border border-transparent hover:text-slate-900')}
-                            onClick={() => setPatientSection('consultations')}
-                          >
-                            <Activity size={18} className={patientSection === 'consultations' ? 'text-indigo-600' : 'text-slate-400'} /> Video Consultations
-                          </button>
-                        )}
                         {hasPrivilege('upload_reports') && (
                           <button
                             type="button"
@@ -1542,8 +1556,95 @@ function AppContent() {
                         <Card className="p-8 border border-slate-200/80 bg-white/80 backdrop-blur-xl">
                           <h3 className="text-2xl font-bold text-slate-800 tracking-tight">My Prescriptions</h3>
                           <p className="text-slate-500 font-medium text-sm mt-1">View digital prescriptions issued by your doctors.</p>
-                          <div className="mt-6 p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60">
-                            <p className="text-slate-700 font-medium">Prescription history component can be merged into this section.</p>
+                          <div className="mt-6 space-y-4">
+                            {prescriptionsLoading ? (
+                              <div className="text-sm text-slate-500 flex items-center gap-2">
+                                <RefreshCw size={14} className="animate-spin" />
+                                Loading prescriptions...
+                              </div>
+                            ) : prescriptionsError ? (
+                              <div className="rounded-xl border border-red-100 bg-red-50 text-red-700 text-sm px-4 py-3">
+                                {prescriptionsError}
+                              </div>
+                            ) : prescriptions.length === 0 ? (
+                              <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                                <div className="w-16 h-16 bg-slate-100 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4">
+                                  <Shield size={28} />
+                                </div>
+                                <h4 className="text-slate-800 font-bold mb-1">No prescriptions found</h4>
+                                <p className="text-slate-500 text-sm">Prescriptions issued by your doctors will appear here after consultations.</p>
+                              </div>
+                            ) : (
+                              <ul className="space-y-4">
+                                {prescriptions.map((rx) => (
+                                  <li
+                                    key={rx._id}
+                                    className="p-5 rounded-2xl border border-slate-200/70 hover:border-indigo-200 hover:shadow-md transition-all bg-white flex flex-col gap-3"
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                                          {rx.slotDate && rx.slotTime
+                                            ? `${formatAppointmentDate(rx.slotDate)} · ${formatTime12h(rx.slotTime)}`
+                                            : new Date(rx.createdAt).toLocaleString()}
+                                        </p>
+                                        <h4 className="text-base font-bold text-slate-800">
+                                          {rx.doctorName}{' '}
+                                          {rx.doctorSpeciality && (
+                                            <span className="text-slate-500 font-medium text-sm">· {rx.doctorSpeciality}</span>
+                                          )}
+                                        </h4>
+                                        {rx.reason && (
+                                          <p className="text-xs text-slate-500 mt-1">Reason: {rx.reason}</p>
+                                        )}
+                                      </div>
+                                      {rx.visitMode && (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs px-3 py-1 font-semibold">
+                                          {rx.visitMode === 'telemedicine' ? (
+                                            <>
+                                              <Video size={12} /> Telemedicine
+                                            </>
+                                          ) : (
+                                            'In-person'
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="border border-slate-100 rounded-2xl bg-slate-50/60 p-3">
+                                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+                                        Medications
+                                      </p>
+                                      <ul className="space-y-1.5">
+                                        {(rx.medications || []).map((m, idx) => (
+                                          <li key={`${rx._id}-m-${idx}`} className="text-sm text-slate-700 flex gap-2">
+                                            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                                            <span>
+                                              <span className="font-semibold">{m.drugName}</span>
+                                              {m.dosage && <span className="text-slate-600"> · {m.dosage}</span>}
+                                              {m.frequency && <span className="text-slate-600"> · {m.frequency}</span>}
+                                              {m.duration && <span className="text-slate-600"> · {m.duration}</span>}
+                                              {m.notes && (
+                                                <span className="block text-xs text-slate-500 mt-0.5">
+                                                  {m.notes}
+                                                </span>
+                                              )}
+                                            </span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                    {rx.generalInstructions && (
+                                      <div className="border border-amber-100 bg-amber-50/70 rounded-2xl px-4 py-3 text-sm text-amber-900">
+                                        <p className="font-semibold text-xs uppercase tracking-wide mb-1 text-amber-700">
+                                          General instructions
+                                        </p>
+                                        <p className="leading-relaxed">{rx.generalInstructions}</p>
+                                      </div>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </div>
                         </Card>
                       )}
