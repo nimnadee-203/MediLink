@@ -27,6 +27,11 @@ if (!fs.existsSync(reportsDir)) {
   fs.mkdirSync(reportsDir, { recursive: true });
 }
 
+const profilesDir = path.join(__dirname, '..', 'uploads', 'profiles');
+if (!fs.existsSync(profilesDir)) {
+  fs.mkdirSync(profilesDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, reportsDir),
   filename: (_req, file, cb) => {
@@ -38,6 +43,25 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+const profileImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, profilesDir),
+  filename: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    cb(null, `${Date.now()}-profile${extension}`);
+  }
+});
+
+const profileImageUpload = multer({
+  storage: profileImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!String(file.mimetype || '').startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    return cb(null, true);
+  }
 });
 
 const USER_ROLES = ['patient', 'doctor', 'admin'];
@@ -180,6 +204,7 @@ const sanitizeUser = (user, source = 'patient-db') => ({
   age: user.age,
   gender: user.gender,
   address: user.address,
+  image: user.image,
   clerkUserId: user.clerkUserId,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -197,6 +222,7 @@ const toWritablePayload = (user) => ({
   age: user.age,
   gender: user.gender,
   address: user.address,
+  image: user.image,
   reports: user.reports || []
 });
 
@@ -723,6 +749,41 @@ router.put('/profile', authMiddleware, async (req, res) => {
     return res.json({ message: 'Profile updated successfully', patient: sanitizeUser(account, source) });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to update profile', error: error.message });
+  }
+});
+
+router.post('/profile/image', authMiddleware, profileImageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Profile image file is required (field: image).' });
+    }
+
+    const account = await resolveCurrentPatient(req.user, getProfileHints(req));
+    if (!account) {
+      return res.status(404).json({ message: 'Profile not found' });
+    }
+
+    const previousPath = account.image;
+    account.image = `/uploads/profiles/${req.file.filename}`;
+    await account.save();
+
+    if (previousPath && String(previousPath).startsWith('/uploads/profiles/')) {
+      const absolutePreviousPath = path.join(__dirname, '..', previousPath.replace(/^\/+/, ''));
+      if (fs.existsSync(absolutePreviousPath)) {
+        try {
+          fs.unlinkSync(absolutePreviousPath);
+        } catch {
+        }
+      }
+    }
+
+    const source = account.role === 'admin' ? 'admin-db' : 'patient-db';
+    return res.json({
+      message: 'Profile image updated successfully',
+      patient: sanitizeUser(account, source)
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to upload profile image', error: error.message });
   }
 });
 

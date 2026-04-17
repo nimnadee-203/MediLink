@@ -141,6 +141,14 @@ const getReportPreviewUrl = (report) => {
   return null;
 };
 
+const getProfileImagePreviewUrl = (imagePath) => {
+  if (!imagePath) return '';
+  if (/^https?:\/\//i.test(imagePath)) return imagePath;
+
+  const origin = PREVIEW_ORIGIN_CANDIDATES[0] || window.location.origin;
+  return `${origin}${String(imagePath).startsWith('/') ? '' : '/'}${String(imagePath)}`;
+};
+
 const Card = ({ className, children }) => (
   <div className={cn('bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 md:p-8', className)}>
     {children}
@@ -216,6 +224,8 @@ function AppContent() {
   const [doctorAppointments, setDoctorAppointments] = useState([]);
   const [doctorAppointmentsLoading, setDoctorAppointmentsLoading] = useState(false);
   const [doctorAppointmentsError, setDoctorAppointmentsError] = useState('');
+  const [profileImageFile, setProfileImageFile] = useState(null);
+  const [profileImagePreview, setProfileImagePreview] = useState('');
 
   const patientEmail = patient?.email || '';
   const visibleEmail =
@@ -231,6 +241,7 @@ function AppContent() {
       ? patient.name
       : clerkDisplayName || patient?.name || 'Patient';
   const doctorRecordId = patient?.id ?? patient?._id ?? null;
+  const profileImageUrl = profileImagePreview || getProfileImagePreviewUrl(patient?.image);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -363,6 +374,8 @@ function AppContent() {
       setAdminSection('overview');
       setMessage('');
       setProfileForm({ name: '', phone: '', age: '', gender: '', address: '' });
+      setProfileImageFile(null);
+      setProfileImagePreview('');
       setReportForm({ title: '', description: '', file: null });
       return;
     }
@@ -484,6 +497,58 @@ function AppContent() {
       navigate('/dashboard');
     } catch (err) {
       showError(err, 'Profile update failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onSelectProfileImage = (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    if (!String(file.type || '').startsWith('image/')) {
+      showError(new Error('Please select a valid image file.'));
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showError(new Error('Image size must be 5MB or less.'));
+      return;
+    }
+
+    const preview = URL.createObjectURL(file);
+    setProfileImageFile(file);
+    setProfileImagePreview(preview);
+  };
+
+  const onUploadProfileImage = async () => {
+    if (!profileImageFile) {
+      showError(new Error('Please choose an image before uploading.'));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('image', profileImageFile);
+
+      const data = await request('/profile/image', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (data?.patient) {
+        setPatient(data.patient);
+      }
+
+      if (profileImagePreview) {
+        URL.revokeObjectURL(profileImagePreview);
+      }
+      setProfileImagePreview('');
+      setProfileImageFile(null);
+      showSuccess('Profile image updated successfully');
+    } catch (err) {
+      showError(err, 'Profile image upload failed');
     } finally {
       setLoading(false);
     }
@@ -1488,6 +1553,33 @@ function AppContent() {
                           <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2">
                             <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><User size={20} /></div> Profile Settings
                           </h2>
+                          <div className="mb-6 p-4 rounded-2xl border border-slate-200 bg-slate-50/70">
+                            <p className="text-sm font-semibold text-slate-700 mb-3">Profile Photo</p>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                              {profileImageUrl ? (
+                                <img
+                                  src={profileImageUrl}
+                                  alt="Profile"
+                                  className="h-20 w-20 rounded-2xl object-cover border border-slate-200"
+                                />
+                              ) : (
+                                <div className="h-20 w-20 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center border border-indigo-200">
+                                  <User size={28} />
+                                </div>
+                              )}
+                              <div className="flex-1 flex flex-col sm:flex-row gap-3">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={onSelectProfileImage}
+                                  className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100"
+                                />
+                                <Button type="button" variant="secondary" onClick={onUploadProfileImage} disabled={loading || !profileImageFile}>
+                                  Upload
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
                           <form onSubmit={onSaveProfile} className="space-y-6">
                             <div className="grid md:grid-cols-2 gap-6">
                               <div className="md:col-span-2">
@@ -1547,6 +1639,33 @@ function AppContent() {
                   <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                     <User className="text-blue-600" /> Profile Settings
                   </h2>
+                  <div className="mb-6 p-4 rounded-2xl border border-slate-200 bg-slate-50/70">
+                    <p className="text-sm font-semibold text-slate-700 mb-3">Profile Photo</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      {profileImageUrl ? (
+                        <img
+                          src={profileImageUrl}
+                          alt="Profile"
+                          className="h-20 w-20 rounded-2xl object-cover border border-slate-200"
+                        />
+                      ) : (
+                        <div className="h-20 w-20 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center border border-indigo-200">
+                          <User size={28} />
+                        </div>
+                      )}
+                      <div className="flex-1 flex flex-col sm:flex-row gap-3">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={onSelectProfileImage}
+                          className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100"
+                        />
+                        <Button type="button" variant="secondary" onClick={onUploadProfileImage} disabled={loading || !profileImageFile}>
+                          Upload
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                   <form onSubmit={onSaveProfile} className="space-y-6">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="md:col-span-2">

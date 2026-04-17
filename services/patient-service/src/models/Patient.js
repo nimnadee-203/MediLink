@@ -25,6 +25,7 @@ const patientSchema = new mongoose.Schema(
     age: { type: Number },
     gender: { type: String, enum: ['male', 'female', 'other'] },
     address: { type: String, trim: true },
+    image: { type: String, trim: true },
     reports: [reportSchema]
   },
   { timestamps: true }
