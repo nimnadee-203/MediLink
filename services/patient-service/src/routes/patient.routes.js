@@ -437,13 +437,19 @@ const resolveCurrentPatient = async (user, profileHints = {}) => {
 
   if (shouldBeAdmin) {
     const sourceUser = adminUser || patientUser;
+    const resolvedName =
+      sourceUser?.name && sourceUser.name !== 'Clerk User'
+        ? sourceUser.name
+        : hintedName || user.name || user.email || user.phone || 'Clerk User';
+    const resolvedPhone =
+      sourceUser?.phone || hintedPhone || user.phone || undefined;
     const adminPayload = {
       ...(sourceUser ? toWritablePayload(sourceUser.toObject()) : {}),
-      name: hintedName || sourceUser?.name || user.name || user.email || user.phone || 'Clerk User',
+      name: resolvedName,
       email: preferredEmail,
       clerkUserId: user?.id,
       role: 'admin',
-      phone: hintedPhone || sourceUser?.phone || user.phone || undefined
+      phone: resolvedPhone
     };
 
     let ensuredAdmin = adminUser;

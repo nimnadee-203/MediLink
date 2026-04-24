@@ -25,6 +25,10 @@ kubectl apply -f kubernetes/api-gateway.yaml
 kubectl apply -f kubernetes/client.yaml
 kubectl apply -f kubernetes/admin.yaml
 
+# 4. Apply Ingress
+Write-Host "4. Applying Ingress..."
+kubectl apply -f kubernetes/ingress.yaml
+
 Write-Host "`n--- Deployment Commands Sent! ---" -ForegroundColor Green
 Write-Host "Run 'kubectl get pods' to check the status."
 Write-Host "Wait a few minutes for Pods to show 'Running'."

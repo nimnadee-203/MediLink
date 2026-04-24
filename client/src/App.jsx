@@ -146,7 +146,11 @@ const getProfileImagePreviewUrl = (imagePath) => {
   if (/^https?:\/\//i.test(imagePath)) return imagePath;
 
   const origin = PREVIEW_ORIGIN_CANDIDATES[0] || window.location.origin;
-  return `${origin}${String(imagePath).startsWith('/') ? '' : '/'}${String(imagePath)}`;
+  const normalizedPath = String(imagePath).startsWith('/uploads/')
+    ? String(imagePath).replace('/uploads/', '/patient-uploads/')
+    : String(imagePath);
+
+  return `${origin}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
 };
 
 const Card = ({ className, children }) => (
