@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Patient from '../models/Patient.js';
 import Admin from '../models/Admin.js';
+import { resolveSafeDbName } from './dbName.js';
 
 const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
 
@@ -99,8 +100,8 @@ const upsertDomainUser = async (legacyUser, adminEmails) => {
 };
 
 export const migrateLegacyUsersToDomainCollections = async () => {
-  const patientDbName = process.env.PATIENT_DB_NAME || 'patients';
-  const adminDbName = process.env.ADMIN_DB_NAME || 'admin_1';
+  const patientDbName = resolveSafeDbName(process.env.PATIENT_DB_NAME, 'patients', 'patient-service');
+  const adminDbName = resolveSafeDbName(process.env.ADMIN_DB_NAME, 'admin_1', 'patient-service');
   const legacyCollectionNames = (process.env.LEGACY_USERS_COLLECTION_NAMES || process.env.LEGACY_USERS_COLLECTION_NAME || 'users,patients')
     .split(',')
     .map((value) => value.trim())
@@ -145,8 +146,8 @@ export const migrateLegacyUsersToDomainCollections = async () => {
 
 export const dropLegacyTestDatabases = async () => {
   const protectedDbs = new Set([
-    process.env.PATIENT_DB_NAME || 'patients',
-    process.env.ADMIN_DB_NAME || 'admin_1',
+    resolveSafeDbName(process.env.PATIENT_DB_NAME, 'patients', 'patient-service'),
+    resolveSafeDbName(process.env.ADMIN_DB_NAME, 'admin_1', 'patient-service'),
     'auth',
     'appointments',
     'doctors'

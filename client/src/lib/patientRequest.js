@@ -8,6 +8,31 @@ const PATIENT_BASE_URLS = Array.from(
   )
 );
 
+function getClerkIdentityHeaders() {
+  if (typeof window === 'undefined') return {};
+
+  const clerkUser = window?.Clerk?.user;
+  if (!clerkUser) return {};
+
+  const email =
+    clerkUser?.primaryEmailAddress?.emailAddress ||
+    clerkUser?.emailAddresses?.[0]?.emailAddress ||
+    '';
+  const name =
+    clerkUser?.fullName ||
+    [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(' ').trim();
+  const phone =
+    clerkUser?.primaryPhoneNumber?.phoneNumber ||
+    clerkUser?.phoneNumbers?.[0]?.phoneNumber ||
+    '';
+
+  return {
+    ...(email ? { 'x-clerk-email': email } : {}),
+    ...(name ? { 'x-clerk-name': name } : {}),
+    ...(phone ? { 'x-clerk-phone': phone } : {})
+  };
+}
+
 export async function patientRequest(path, getToken, options = {}) {
   let lastFailure = null;
   const timeoutMs = 8000;
@@ -15,7 +40,10 @@ export async function patientRequest(path, getToken, options = {}) {
   for (const baseUrl of PATIENT_BASE_URLS) {
     try {
       const token = await getToken();
-      const headers = { ...(options.headers || {}) };
+      const headers = {
+        ...getClerkIdentityHeaders(),
+        ...(options.headers || {})
+      };
       if (token) headers.Authorization = `Bearer ${token}`;
 
       let body = options.body;

@@ -52,7 +52,8 @@ const emptyMedicationRow = () => ({
 });
 
 const DoctorHome = () => {
-  const { backendUrl, getDoctorAuthHeaders, logout, isDoctorUser, dToken } = useContext(AdminContext);
+  const { backendUrl, gatewayUrl, getDoctorAuthHeaders, logout, isDoctorUser, dToken } = useContext(AdminContext);
+  const patientUploadsBaseUrl = import.meta.env.VITE_PATIENT_UPLOADS_BASE_URL || 'http://localhost:8002';
   const jitsiContainerRef = useRef(null);
   const jitsiApiRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +111,31 @@ const DoctorHome = () => {
     if (value < 1024) return `${value} B`;
     if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
     return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getReportPreviewUrl = (report) => {
+    if (!report) return '';
+
+    const baseOrigin = patientUploadsBaseUrl || gatewayUrl || backendUrl || window.location.origin;
+    const rawPath = String(report.filePath || '');
+
+    if (rawPath) {
+      if (/^https?:\/\//i.test(rawPath)) {
+        return rawPath;
+      }
+
+      const normalizedPath = rawPath.startsWith('/uploads/')
+        ? rawPath.replace('/uploads/', '/patient-uploads/')
+        : rawPath;
+
+      return `${baseOrigin}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
+    }
+
+    if (report.fileName) {
+      return `${baseOrigin}/patient-uploads/reports/${encodeURIComponent(report.fileName)}`;
+    }
+
+    return '';
   };
 
   const loadDoctorHome = async () => {
@@ -909,7 +935,7 @@ const DoctorHome = () => {
                         </div>
                         {report.fileName ? (
                           <a
-                            href={`${backendUrl}/patient-uploads/reports/${encodeURIComponent(report.fileName)}`}
+                            href={getReportPreviewUrl(report)}
                             target="_blank"
                             rel="noreferrer"
                           >

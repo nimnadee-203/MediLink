@@ -23,18 +23,22 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
+//  This means this patient service can talk to the doctor service.
 const DOCTOR_SERVICE_URL = process.env.DOCTOR_SERVICE_URL || 'http://localhost:4000';
 
+// This creates a folder path for report uploads.
 const reportsDir = path.join(__dirname, '..', 'uploads', 'reports');
 if (!fs.existsSync(reportsDir)) {
   fs.mkdirSync(reportsDir, { recursive: true });
 }
 
+// This creates a folder path for profile image uploads.
 const profilesDir = path.join(__dirname, '..', 'uploads', 'profiles');
 if (!fs.existsSync(profilesDir)) {
   fs.mkdirSync(profilesDir, { recursive: true });
 }
 
+// Save uploaded report files inside the reports folder.
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, reportsDir),
   filename: (_req, file, cb) => {
@@ -43,6 +47,7 @@ const storage = multer.diskStorage({
   }
 });
 
+// upload size limit 10MB for reports
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }
@@ -56,6 +61,7 @@ const profileImageStorage = multer.diskStorage({
   }
 });
 
+// User can upload only image files, maximum 5 MB.
 const profileImageUpload = multer({
   storage: profileImageStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -69,13 +75,16 @@ const profileImageUpload = multer({
 
 const USER_ROLES = ['patient', 'doctor', 'admin'];
 
+// This makes email lower-case and removes extra spaces.
 const normalizeEmail = (value = '') => String(value).trim().toLowerCase();
 
+// This creates a list of admin emails.
 const parseAdminEmails = () =>
   Array.from(
     new Set(
       [
         ...(process.env.ADMIN_EMAILS || '').split(','),
+        process.env.ADMIN_EMAIL,
         'admin@medisync.ai',
         'it23589254@my.sliit.lk'
       ]
@@ -83,23 +92,26 @@ const parseAdminEmails = () =>
         .filter(Boolean)
     )
   );
-
+// check and verify its a admin 
 const isAdminEmail = (email) => {
   if (!email) return false;
   return parseAdminEmails().includes(normalizeEmail(email));
 };
 
+// Parse admin Clerk user IDs
 const parseAdminClerkUserIds = () =>
   (process.env.ADMIN_CLERK_USER_IDS || '')
     .split(',')
     .map((id) => id.trim())
     .filter(Boolean);
 
+// Is this Clerk user ID inside the admin list?
 const isAdminClerkUserId = (clerkUserId) => {
   if (!clerkUserId) return false;
   return parseAdminClerkUserIds().includes(clerkUserId);
 };
 
+// This creates a Clerk backend client.
 const getClerkClient = () => {
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey || /replace_with/i.test(secretKey)) {
@@ -109,6 +121,7 @@ const getClerkClient = () => {
   return createClerkClient({ secretKey });
 };
 
+// This splits a full name into: first name and last name.
 const splitName = (fullName = '') => {
   const normalized = fullName.trim().replace(/\s+/g, ' ');
   if (!normalized) return { firstName: undefined, lastName: undefined };
@@ -120,41 +133,48 @@ const splitName = (fullName = '') => {
   };
 };
 
+// This creates a small random text. this is useful if user name is already exist 
 const randomSuffix = () => Math.random().toString(36).slice(2, 6);
 
+// This cleans username so Clerk accepts it.
 const normalizeClerkUsername = (value = '') => {
   let username = String(value).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
 
   if (!username) {
     return `user_${randomSuffix()}`;
   }
-
+  // user name must start with a letter
   if (!/^[a-z]/.test(username)) {
     username = `u${username}`;
   }
 
+  // user name must be at least 3 characters long, if not add a random suffix
   if (username.length < 3) {
     username = `${username}${randomSuffix()}`;
   }
 
-  return username.slice(0, 32);
+  return username.slice(0, 32); // limit 32 chars 
 };
 
+// This takes Clerk error object and turns it into simple text.
 const extractClerkErrorText = (error) =>
   error?.errors?.map((item) => `${item?.code || ''}:${item?.longMessage || item?.message || ''}`).join(' | ') || error?.message || '';
 
+// This checks if Clerk error is related to username.
 const hasUsernameRequirementError = (error) => /username/i.test(extractClerkErrorText(error));
 
+// This function tries to create a Clerk user, But if username fails, it tries another username.
 const createClerkUserWithUsernameFallback = async ({ clerkClient, email, password, firstName, lastName, role, username }) => {
-  const primary = normalizeClerkUsername(username);
-  const alnumOnly = primary.replace(/[^a-z0-9]/g, '').slice(0, 24) || `user${randomSuffix()}`;
-  const candidates = Array.from(new Set([
+  const primary = normalizeClerkUsername(username); // creates main user name
+  const alnumOnly = primary.replace(/[^a-z0-9]/g, '').slice(0, 24) || `user${randomSuffix()}`; // creates user name letters and numbers 
+  const candidates = Array.from(new Set([ // creates list of possible names 
     primary,
     alnumOnly,
     `${primary.slice(0, 26)}_${randomSuffix()}`,
     `user_${randomSuffix()}${randomSuffix()}`
   ]));
 
+  // try each user name 
   let lastError;
 
   for (const candidate of candidates) {
@@ -177,6 +197,7 @@ const createClerkUserWithUsernameFallback = async ({ clerkClient, email, passwor
     }
   }
 
+  // try creating user without username 
   try {
     const createdWithoutUsername = await clerkClient.users.createUser({
       emailAddress: [email],
@@ -197,6 +218,7 @@ const createClerkUserWithUsernameFallback = async ({ clerkClient, email, passwor
   throw lastError;
 };
 
+// This returns safe user data for API responses.
 const sanitizeUser = (user, source = 'patient-db') => ({
   id: user._id,
   name: user.name,
@@ -214,6 +236,7 @@ const sanitizeUser = (user, source = 'patient-db') => ({
   source
 });
 
+// This builds a clean object for saving user data.
 const toWritablePayload = (user) => ({
   name: user.name,
   username: user.username,
@@ -229,44 +252,49 @@ const toWritablePayload = (user) => ({
   reports: user.reports || []
 });
 
+// This normalizes role values to valid roles.
 const normalizeInputRole = (role) => {
   if (role === 'admin') return 'admin';
   if (role === 'doctor') return 'doctor';
   return 'patient';
 };
 
+// This reads user details passed from gateway headers.
 const getProfileHints = (req) => ({
   email: req.headers['x-clerk-email'] || '',
   name: req.headers['x-clerk-name'] || '',
   phone: req.headers['x-clerk-phone'] || ''
 });
 
+// This finds matching user records by Clerk ID or email.
 const findUserByIdentity = async (user, profileHints = {}) => {
   const emailCandidates = [
     normalizeEmail(user?.email),
     normalizeEmail(profileHints?.email)
   ].filter(Boolean);
 
-  const orConditions = [];
+  let adminUser = null;
+  let patientUser = null;
+
   if (user?.id) {
-    orConditions.push({ clerkUserId: user.id });
-  }
-  emailCandidates.forEach((email) => {
-    orConditions.push({ email });
-  });
-
-  if (!orConditions.length) {
-    return { adminUser: null, patientUser: null };
+    [adminUser, patientUser] = await Promise.all([
+      Admin.findOne({ clerkUserId: user.id }),
+      Patient.findOne({ clerkUserId: user.id })
+    ]);
   }
 
-  const [adminUser, patientUser] = await Promise.all([
-    Admin.findOne({ $or: orConditions }),
-    Patient.findOne({ $or: orConditions })
-  ]);
+  if (!adminUser && emailCandidates.length) {
+    adminUser = await Admin.findOne({ email: { $in: emailCandidates } });
+  }
+
+  if (!patientUser && emailCandidates.length) {
+    patientUser = await Patient.findOne({ email: { $in: emailCandidates } });
+  }
 
   return { adminUser, patientUser };
 };
 
+// This finds a user by id from both admin and patient stores.
 const findUserByIdAcrossStores = async (userId) => {
   const [adminUser, patientUser] = await Promise.all([
     Admin.findById(userId),
@@ -284,6 +312,7 @@ const findUserByIdAcrossStores = async (userId) => {
   return { user: null, source: null };
 };
 
+// This updates Clerk user metadata and name when needed.
 const syncClerkMetadata = async (clerkUserId, role, name) => {
   if (!clerkUserId) return;
 
@@ -305,6 +334,7 @@ const syncClerkMetadata = async (clerkUserId, role, name) => {
   }
 };
 
+// This moves old admin users from patient collection to admin collection.
 const migrateLegacyAdminUsers = async () => {
   const legacyAdmins = await Patient.find({ role: 'admin' });
   if (!legacyAdmins.length) return;
@@ -327,6 +357,7 @@ const migrateLegacyAdminUsers = async () => {
   }
 };
 
+// This makes sure configured admin accounts exist in the database.
 const ensureConfiguredAdminAccounts = async () => {
   const adminEmails = parseAdminEmails();
   if (!adminEmails.length) return;
@@ -370,6 +401,7 @@ const ensureConfiguredAdminAccounts = async () => {
   }
 };
 
+// This resolves the current logged-in user as patient or admin.
 const resolveCurrentPatient = async (user, profileHints = {}) => {
   const { adminUser, patientUser } = await findUserByIdentity(user, profileHints);
   const hintedEmail = normalizeEmail(profileHints?.email);
@@ -388,21 +420,81 @@ const resolveCurrentPatient = async (user, profileHints = {}) => {
     isAdminClerkUserId(adminUser?.clerkUserId) ||
     isAdminClerkUserId(patientUser?.clerkUserId);
 
+  // This safely saves admin data and handles duplicate keys.
+  const persistAdminPayload = async (candidate, payload) => {
+    let target = candidate;
+    const nextPayload = { ...payload };
+
+    if (nextPayload.clerkUserId) {
+      const clerkOwner = await Admin.findOne({ clerkUserId: nextPayload.clerkUserId });
+      if (clerkOwner && String(clerkOwner._id) !== String(target._id)) {
+        target = clerkOwner;
+      }
+    }
+
+    if (nextPayload.email && nextPayload.email !== target.email) {
+      const emailOwner = await Admin.findOne({ email: nextPayload.email });
+      if (emailOwner && String(emailOwner._id) !== String(target._id)) {
+        delete nextPayload.email;
+      }
+    }
+
+    Object.assign(target, nextPayload);
+
+    try {
+      await target.save();
+      return target;
+    } catch (error) {
+      const isDuplicateClerkKey = error?.code === 11000 && String(error?.message || '').includes('clerkUserId_1');
+      if (!isDuplicateClerkKey || !nextPayload.clerkUserId) {
+        throw error;
+      }
+
+      const clerkOwner = await Admin.findOne({ clerkUserId: nextPayload.clerkUserId });
+      if (!clerkOwner) {
+        throw error;
+      }
+
+      if (nextPayload.email && nextPayload.email !== clerkOwner.email) {
+        const emailOwner = await Admin.findOne({ email: nextPayload.email });
+        if (emailOwner && String(emailOwner._id) !== String(clerkOwner._id)) {
+          delete nextPayload.email;
+        }
+      }
+
+      Object.assign(clerkOwner, nextPayload);
+      await clerkOwner.save();
+      return clerkOwner;
+    }
+  };
+
   if (shouldBeAdmin) {
     const sourceUser = adminUser || patientUser;
+    const resolvedName =
+      sourceUser?.name && sourceUser.name !== 'Clerk User'
+        ? sourceUser.name
+        : hintedName || user.name || user.email || user.phone || 'Clerk User';
+    const resolvedPhone =
+      sourceUser?.phone || hintedPhone || user.phone || undefined;
     const adminPayload = {
       ...(sourceUser ? toWritablePayload(sourceUser.toObject()) : {}),
-      name: hintedName || sourceUser?.name || user.name || user.email || user.phone || 'Clerk User',
+      name: resolvedName,
       email: preferredEmail,
       clerkUserId: user?.id,
       role: 'admin',
-      phone: hintedPhone || sourceUser?.phone || user.phone || undefined
+      phone: resolvedPhone
     };
 
     let ensuredAdmin = adminUser;
+    if (adminPayload.clerkUserId) {
+      const adminMatchedByClerkId = await Admin.findOne({ clerkUserId: adminPayload.clerkUserId });
+      if (adminMatchedByClerkId) {
+        ensuredAdmin = adminMatchedByClerkId;
+      }
+    }
+
     if (ensuredAdmin) {
-      Object.assign(ensuredAdmin, adminPayload);
-      await ensuredAdmin.save();
+      ensuredAdmin = await persistAdminPayload(ensuredAdmin, adminPayload);
     } else {
       try {
         ensuredAdmin = await Admin.create(adminPayload);
@@ -422,8 +514,7 @@ const resolveCurrentPatient = async (user, profileHints = {}) => {
           throw error;
         }
 
-        Object.assign(ensuredAdmin, adminPayload);
-        await ensuredAdmin.save();
+        ensuredAdmin = await persistAdminPayload(ensuredAdmin, adminPayload);
       }
     }
 
@@ -538,6 +629,7 @@ const resolveCurrentPatient = async (user, profileHints = {}) => {
   return created;
 };
 
+// This blocks non-admin users from admin-only routes.
 const requireAdmin = async (req, res, next) => {
   try {
     const profileHints = getProfileHints(req);
@@ -614,6 +706,7 @@ const requireAdmin = async (req, res, next) => {
   }
 };
 
+// This moves old embedded reports into the Report collection.
 const migrateEmbeddedReportsForAccount = async (account) => {
   if (!account || account.role !== 'patient' || !Array.isArray(account.reports) || !account.reports.length) {
     return;
@@ -654,19 +747,23 @@ const migrateEmbeddedReportsForAccount = async (account) => {
   await account.save();
 };
 
+// This gets all reports for one account in latest-first order.
 const listReportsForAccount = async (account) => {
   await migrateEmbeddedReportsForAccount(account);
   return Report.find({ patientId: account._id }).sort({ uploadedAt: -1, _id: -1 });
 };
 
+// This route is disabled because sign-up is handled by Clerk.
 router.post('/register', async (_req, res) => {
   return res.status(410).json({ message: 'This service uses Clerk authentication. Sign up from the client app.' });
 });
 
+// This route is disabled because sign-in is handled by Clerk.
 router.post('/login', async (_req, res) => {
   return res.status(410).json({ message: 'This service uses Clerk authentication. Sign in from the client app.' });
 });
 
+// This returns the current user's profile.
 router.get('/profile', authMiddleware, async (req, res) => {
   try {
     try {
@@ -703,6 +800,7 @@ router.get('/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// This updates the current user's profile details.
 router.put('/profile', authMiddleware, async (req, res) => {
   try {
     const updates = (({ name, phone, age, gender, address }) => ({ name, phone, age, gender, address }))(req.body);
@@ -745,7 +843,11 @@ router.put('/profile', authMiddleware, async (req, res) => {
     await account.save();
 
     if (updates.name !== undefined) {
-      await syncClerkMetadata(req.user.id, null, updates.name);
+      try {
+        await syncClerkMetadata(req.user.id, null, updates.name);
+      } catch (syncError) {
+        console.warn('[patient-service] clerk profile sync warning:', syncError.message);
+      }
     }
 
     const source = account.role === 'admin' ? 'admin-db' : 'patient-db';
@@ -755,6 +857,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// This uploads and saves the current user's profile image.
 router.post('/profile/image', authMiddleware, profileImageUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -790,6 +893,7 @@ router.post('/profile/image', authMiddleware, profileImageUpload.single('image')
   }
 });
 
+// This returns all users for admin management.
 router.get('/admin/users', authMiddleware, requireAdmin, async (_req, res) => {
   try {
     await migrateLegacyAdminUsers();
@@ -811,6 +915,7 @@ router.get('/admin/users', authMiddleware, requireAdmin, async (_req, res) => {
   }
 });
 
+// This creates a new user from the admin side.
 router.post('/admin/users', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, username, email, role = 'patient', phone, password } = req.body;
@@ -902,6 +1007,7 @@ router.post('/admin/users', authMiddleware, requireAdmin, async (req, res) => {
   }
 });
 
+// This updates user details from the admin side.
 router.patch('/admin/users/:userId', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
@@ -967,6 +1073,7 @@ router.patch('/admin/users/:userId', authMiddleware, requireAdmin, async (req, r
   }
 });
 
+// This deletes a user from the admin side.
 router.delete('/admin/users/:userId', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
@@ -1002,6 +1109,7 @@ router.delete('/admin/users/:userId', authMiddleware, requireAdmin, async (req, 
   }
 });
 
+// This updates only the role of a selected user.
 router.patch('/admin/users/:userId/role', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
@@ -1045,6 +1153,7 @@ router.patch('/admin/users/:userId/role', authMiddleware, requireAdmin, async (r
   }
 });
 
+// This triggers migration of legacy users to new collections.
 router.post('/admin/migrate-legacy-users', authMiddleware, requireAdmin, async (_req, res) => {
   try {
     const migration = await migrateLegacyUsersToDomainCollections();
@@ -1057,6 +1166,7 @@ router.post('/admin/migrate-legacy-users', authMiddleware, requireAdmin, async (
   }
 });
 
+// This removes old test databases.
 router.post('/admin/cleanup-test-dbs', authMiddleware, requireAdmin, async (_req, res) => {
   try {
     const cleanup = await dropLegacyTestDatabases();
@@ -1069,6 +1179,7 @@ router.post('/admin/cleanup-test-dbs', authMiddleware, requireAdmin, async (_req
   }
 });
 
+// This uploads a new report file for the current patient.
 router.post('/reports', authMiddleware, upload.single('report'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1100,6 +1211,7 @@ router.post('/reports', authMiddleware, upload.single('report'), async (req, res
   }
 });
 
+// This returns all reports for the current patient.
 router.get('/reports', authMiddleware, async (req, res) => {
   try {
     const account = await resolveCurrentPatient(req.user, getProfileHints(req));
@@ -1114,6 +1226,7 @@ router.get('/reports', authMiddleware, async (req, res) => {
   }
 });
 
+// This edits the title/description of one report.
 router.patch('/reports/:reportId', authMiddleware, async (req, res) => {
   try {
     const { reportId } = req.params;
@@ -1142,6 +1255,7 @@ router.patch('/reports/:reportId', authMiddleware, async (req, res) => {
   }
 });
 
+// This deletes one report and its saved file.
 router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
   try {
     const { reportId } = req.params;
@@ -1178,6 +1292,7 @@ router.delete('/reports/:reportId', authMiddleware, async (req, res) => {
   }
 });
 
+// This returns notification list for the current user.
 router.get('/notifications', authMiddleware, async (req, res) => {
   try {
     const account = await resolveCurrentPatient(req.user, getProfileHints(req));
@@ -1192,6 +1307,7 @@ router.get('/notifications', authMiddleware, async (req, res) => {
   }
 });
 
+// This marks one notification as read.
 router.patch('/notifications/:notificationId/read', authMiddleware, async (req, res) => {
   try {
     const { notificationId } = req.params;
@@ -1207,6 +1323,7 @@ router.patch('/notifications/:notificationId/read', authMiddleware, async (req, 
   }
 });
 
+// This returns only email by account id.
 router.get('/emails/:id', async (req, res) => {
   try {
     const [patient, admin] = await Promise.all([
@@ -1223,6 +1340,7 @@ router.get('/emails/:id', async (req, res) => {
   }
 });
 
+// This gets prescriptions for the current patient from doctor service.
 router.get('/prescriptions', authMiddleware, async (req, res) => {
   try {
     const patient = await resolveCurrentPatient(req.user, getProfileHints(req));
@@ -1245,6 +1363,7 @@ router.get('/prescriptions', authMiddleware, async (req, res) => {
   }
 });
 
+// This returns basic account data by id.
 router.get('/:id([a-fA-F0-9]{24})', async (req, res) => {
   try {
     const [patient, admin] = await Promise.all([

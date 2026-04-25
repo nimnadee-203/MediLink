@@ -56,7 +56,8 @@ const AdminContextProvider = (props) => {
 
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-            throw new Error(data.message || `Request failed (${response.status})`);
+            const message = data.error ? `${data.message || 'Request failed'}: ${data.error}` : (data.message || `Request failed (${response.status})`);
+            throw new Error(message);
         }
 
         return data;
@@ -687,6 +688,7 @@ const AdminContextProvider = (props) => {
         dToken,
         setDToken,
         backendUrl,
+        gatewayUrl,
         dashData,
         getDashData,
         doctors,
@@ -719,6 +721,7 @@ const AdminContextProvider = (props) => {
         aToken,
         dToken,
         backendUrl,
+        gatewayUrl,
         dashData,
         getDashData,
         doctors,
