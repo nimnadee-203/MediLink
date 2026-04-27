@@ -313,9 +313,12 @@ export const updateAppointment = async (req, res) => {
     }
 
     // Promote appointment to confirmed when payment becomes paid unless an explicit status is provided.
+    // Commented out: Appointments should remain pending until a doctor explicitly confirms them.
+    /*
     if (updates.paymentStatus === "paid" && updates.status === undefined && appointment.status === "pending") {
       updates.status = "confirmed";
     }
+    */
 
     if (updates.amount !== undefined && (typeof updates.amount !== "number" || Number.isNaN(updates.amount) || updates.amount < 0)) {
       return res.status(400).json({ message: "amount must be a valid non-negative number" });

@@ -52,7 +52,7 @@ const emptyMedicationRow = () => ({
 });
 
 const DoctorHome = () => {
-  const { backendUrl, getDoctorAuthHeaders, logout, isDoctorUser, dToken } = useContext(AdminContext);
+  const { backendUrl, gatewayUrl, getDoctorAuthHeaders, logout, isDoctorUser, dToken } = useContext(AdminContext);
   const jitsiContainerRef = useRef(null);
   const jitsiApiRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -653,17 +653,19 @@ const DoctorHome = () => {
                           >
                             {detailsLoadingId === aid ? 'Loading...' : 'View'}
                           </button>
-                          <button
-                            type="button"
-                            className="row-action-btn approve"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              runAppointmentAction(aid, 'approve');
-                            }}
-                            disabled={actionLoadingId === `${aid}approve` || !['pending', 'confirmed'].includes(apt.status)}
-                          >
-                            {actionLoadingId === `${aid}approve` ? 'Approving...' : 'Approve'}
-                          </button>
+                          {apt.status === 'pending' && (
+                            <button
+                              type="button"
+                              className="row-action-btn approve"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                runAppointmentAction(aid, 'approve');
+                              }}
+                              disabled={actionLoadingId === `${aid}approve`}
+                            >
+                              {actionLoadingId === `${aid}approve` ? 'Approving...' : 'Approve'}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="row-action-btn approve"
@@ -878,7 +880,7 @@ const DoctorHome = () => {
                 <p>Review details and manage appointment status.</p>
               </div>
               <button type="button" className="appointment-modal-close" onClick={() => setSelectedAppointment(null)}>
-                ├ù
+                &times;
               </button>
             </div>
             {actionError && <p className="error-text">{actionError}</p>}
@@ -904,12 +906,12 @@ const DoctorHome = () => {
                         <div>
                           <p>{report.title || report.fileName || 'Report'}</p>
                           <small>
-                            {report.fileName || 'file'} ┬╖ {formatBytes(report.size)}
+                            {report.fileName || 'file'} · {formatBytes(report.size)}
                           </small>
                         </div>
                         {report.fileName ? (
                           <a
-                            href={`${backendUrl}/patient-uploads/reports/${encodeURIComponent(report.fileName)}`}
+                            href={`${gatewayUrl}/patient-uploads/reports/${encodeURIComponent(report.fileName)}`}
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -926,14 +928,16 @@ const DoctorHome = () => {
                 )}
               </div>
               <div className="details-actions">
-                <button
-                  type="button"
-                  className="row-action-btn approve"
-                  onClick={() => runAppointmentAction(appointmentRecordId(selectedAppointment), 'approve')}
-                  disabled={actionLoadingId === `${appointmentRecordId(selectedAppointment)}approve` || !['pending', 'confirmed'].includes(selectedAppointment.status)}
-                >
-                  {actionLoadingId === `${appointmentRecordId(selectedAppointment)}approve` ? 'Approving...' : 'Approve Appointment'}
-                </button>
+                {selectedAppointment.status === 'pending' && (
+                  <button
+                    type="button"
+                    className="row-action-btn approve"
+                    onClick={() => runAppointmentAction(appointmentRecordId(selectedAppointment), 'approve')}
+                    disabled={actionLoadingId === `${appointmentRecordId(selectedAppointment)}approve`}
+                  >
+                    {actionLoadingId === `${appointmentRecordId(selectedAppointment)}approve` ? 'Approving...' : 'Approve Appointment'}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="row-action-btn approve"

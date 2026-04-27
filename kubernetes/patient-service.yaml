@@ -57,6 +57,15 @@ spec:
             configMapKeyRef:
               name: medisync-config
               key: NOTIFICATION_SERVICE_URL
+        - name: CLERK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: CLERK_SECRET_KEY
+        - name: ADMIN_EMAILS
+          value: "admin@medisync.com,admin@medisync.ai,it23589254@my.sliit.lk"
+        - name: ADMIN_CLERK_USER_IDS
+          value: "user_3CIXYrR3R3beuJuLfei7vv1KjV1"
         volumeMounts:
         - name: reports-storage
           mountPath: /app/src/uploads/reports

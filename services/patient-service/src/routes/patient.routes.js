@@ -1114,6 +1114,19 @@ router.get('/reports', authMiddleware, async (req, res) => {
   }
 });
 
+router.post('/internal/reports', async (req, res) => {
+  try {
+    const { reportIds } = req.body;
+    if (!Array.isArray(reportIds)) {
+      return res.status(400).json({ success: false, message: 'reportIds must be an array' });
+    }
+    const reports = await Report.find({ _id: { $in: reportIds } }).lean();
+    return res.json({ success: true, reports });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.patch('/reports/:reportId', authMiddleware, async (req, res) => {
   try {
     const { reportId } = req.params;

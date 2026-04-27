@@ -64,3 +64,5 @@ firebase.json
 # Runtime uploads
 services/**/src/uploads/
 kubernetes/k8s-secrets.yaml
+kubernetes/k8s-secrets.yaml
+.env

@@ -20,6 +20,19 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5174
+        env:
+        - name: VITE_CLERK_PUBLISHABLE_KEY
+          value: "pk_test_cGF0aWVudC1nYXJmaXNoLTU0LmNsZXJrLmFjY291bnRzLmRldiQ"
+        - name: VITE_STRIPE_PUBLISHABLE_KEY
+          value: "pk_test_51T5SMBI0o0kCE1TXDw09W0iJddPlnTD9pfDhLLawTh6jVr6qvVkNIIEtbNe4S9EnJb1Hb6c1KtHKhwyRiyn5S3iP00hnhWDXZ4"
+        - name: VITE_BACKEND_URL
+          value: "http://localhost:8000"
+        - name: VITE_API_BASE_URL
+          value: "http://localhost:8000/api/patients"
+        - name: VITE_DOCTOR_API_BASE_URL
+          value: "http://localhost:8000/api/doctor"
+        - name: VITE_PAYMENT_API_BASE_URL
+          value: "http://localhost:8000/api"
 ---
 apiVersion: v1
 kind: Service

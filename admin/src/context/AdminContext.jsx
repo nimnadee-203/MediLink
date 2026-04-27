@@ -687,6 +687,7 @@ const AdminContextProvider = (props) => {
         dToken,
         setDToken,
         backendUrl,
+        gatewayUrl,
         dashData,
         getDashData,
         doctors,

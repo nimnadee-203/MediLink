@@ -96,6 +96,11 @@ spec:
             configMapKeyRef:
               name: medisync-config
               key: PATIENT_DB_NAME
+        - name: CLERK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medisync-secrets
+              key: CLERK_SECRET_KEY
 ---
 apiVersion: v1
 kind: Service

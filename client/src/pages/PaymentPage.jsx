@@ -88,7 +88,7 @@ function CheckoutForm({ initialForm, getToken }) {
           await appointmentRequest(`/${appointmentId}`, getToken, {
             method: 'PATCH',
             body: {
-              status: 'confirmed',
+              status: 'pending',
               paymentStatus: 'paid'
             }
           });

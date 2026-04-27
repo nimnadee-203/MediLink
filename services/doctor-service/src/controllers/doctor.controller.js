@@ -67,7 +67,7 @@ export const getDoctorById = async (req, res) => {
   try {
     const doctor = await doctorModel.findById(req.params.doctorId).select(doctorProjection).lean();
 
-    if (!doctor || doctor.status === "rejected" || doctor.available === false) {
+    if (!doctor || doctor.status === "rejected") {
       return res.status(404).json({ success: false, message: "Doctor not found" });
     }
 
@@ -143,6 +143,27 @@ export const getDoctorAppointmentDetails = async (req, res) => {
     const appointment = data?.appointment;
     if (!appointment) {
       return res.json({ success: false, message: "Appointment not found" });
+    }
+
+    // Enrich with reports if any
+    if (Array.isArray(appointment.reportIds) && appointment.reportIds.length > 0) {
+      try {
+        const reportsRes = await axios.post(
+          `${PATIENT_SERVICE_URL}/api/patients/internal/reports`,
+          { reportIds: appointment.reportIds }
+        );
+        if (reportsRes.data?.success) {
+          appointment.reports = (reportsRes.data.reports || []).map((r) => ({
+            id: String(r._id),
+            title: r.title || "",
+            fileName: r.fileName || "",
+            size: r.size || 0,
+            uploadedAt: r.uploadedAt
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch reports for appointment:", err.message);
+      }
     }
 
     return res.json({ success: true, appointment });
